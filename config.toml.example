@@ -1,0 +1,55 @@
+# Copy this file to ~/.claude-evernote-sync/config.toml and customize.
+#
+# This config picks WHERE conversations sync. Credentials (Gmail app password,
+# Evernote email address, OR developer token) go in credentials.json — see README.
+
+[evernote]
+# Sync backend: "email" or "api".
+#
+#   "email" — Send via Evernote's email-to-note feature. Works today.
+#             Requires Gmail SMTP credentials in credentials.json.
+#
+#   "api"   — Send via Evernote's NoteStore API. Currently blocked: Evernote
+#             suspended new developer-token issuance in Jan 2026. Use only if
+#             you have an existing token, or once Evernote reopens access.
+backend = "email"
+
+# Default notebook in Evernote where rollup notes land. Override per-bucket
+# below if you want certain projects in their own notebooks.
+#
+# IMPORTANT for "email" backend: you must create this notebook in Evernote
+# MANUALLY before first sync. Email-to-note silently falls back to your default
+# notebook if the @notebook reference doesn't match an existing one.
+# The "api" backend auto-creates notebooks.
+notebook_name = "claude_convos"
+
+# Required only when backend = "api"
+developer_token = ""
+api_host = "www.evernote.com"
+
+[scan]
+# Where Claude Code stores its session JSONL files.
+projects_dir = "~/.claude/projects"
+
+# Sync sessions modified within the last N days. Keep small for fast runs;
+# bump (or use --backfill) for initial historical sync.
+days_back = 2
+
+[grouping]
+# By default, each session is rolled up under its git repo root's basename.
+# A session in a non-git directory uses that directory's name.
+#
+# Use rollup_overrides to absorb multiple repos under a single parent. Any
+# session whose cwd is under one of these paths will be grouped under that
+# path's basename instead of its individual repo.
+rollup_overrides = [
+    # "/Users/yourname/Documents/git/some-workspace",
+]
+
+# Map a bucket name to a specific Evernote notebook. Buckets not listed here
+# fall back to evernote.notebook_name. Keys are the bucket name (= git repo
+# root basename, or basename of a rollup_overrides path). Quote any key
+# containing characters other than [A-Za-z0-9_-].
+[notebook_overrides]
+# "tile-ai" = "TileAI Notes"
+# biotech_jobs = "Job Search"

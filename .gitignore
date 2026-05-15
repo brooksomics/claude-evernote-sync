@@ -1,0 +1,32 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# macOS
+.DS_Store
+
+# Local config with secrets / state
+config.toml
+credentials.json
+sync_state.json
+sync.log
+launchd.out.log
+launchd.err.log
