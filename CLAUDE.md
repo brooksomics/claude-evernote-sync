@@ -110,7 +110,49 @@ The `*.example` versions (`config.toml.example`, `credentials.json.example`) are
 
 ## Branch model
 
-Solo project, "stain on main" — commit directly to `main`, no PRs for the maintainer. External contributors open PRs; CI must pass before merge.
+`main` is **branch-protected** — direct pushes are rejected. Every change goes through a feature branch and a pull request, including the maintainer's own work.
+
+### Workflow for any agent (Claude Code or otherwise) working in this repo
+
+1. **Branch from `origin/main`, not local `main`** (local main may be divergent if a previous run was interrupted):
+
+   ```bash
+   git fetch origin
+   git checkout -b <type>/<short-name> origin/main
+   ```
+
+2. **Branch name prefixes** (Conventional Commits–aligned):
+   - `fix/` — bug fixes
+   - `feat/` — new functionality
+   - `docs/` — documentation only
+   - `refactor/`, `test/`, `chore/`, `ci/`, `perf/` — as needed
+
+3. **Commit normally** with a Conventional Commit message (see [Commit style](#commit-style) above).
+
+4. **Push the branch and surface the PR URL** to the user:
+
+   ```bash
+   git push -u origin <branch>
+   # GitHub prints a "Create a pull request" URL — hand that to the user
+   ```
+
+5. **Do not push to `main` directly.** The push will be rejected, and you'll leave the local branch divergent (1 commit ahead of `origin/main`). Cleanup requires `git reset --hard origin/main`, which is destructive and needs explicit user approval.
+
+6. **After a PR merges**, the user reconciles local `main` themselves:
+
+   ```bash
+   git checkout main && git fetch && git reset --hard origin/main
+   ```
+
+   Don't try to do this on the user's behalf without their go-ahead.
+
+### One PR per concern
+
+Don't bundle unrelated changes onto a single feature branch. A typo fix and a new feature get two PRs, not one. CI runs against each PR independently, and small PRs review faster.
+
+### External contributors
+
+Same workflow. CI must be green (lint + format + mypy + pytest + pre-commit + gitleaks) before merge.
 
 ## Cross-reference
 
