@@ -47,9 +47,7 @@ def bucket_for_cwd(cwd: str, overrides: list[str]) -> str:
     return cwd_path.name or cwd_path.parent.name
 
 
-def group_sessions(
-    sessions: list[Session], overrides: list[str]
-) -> dict[GroupKey, list[Session]]:
+def group_sessions(sessions: list[Session], overrides: list[str]) -> dict[GroupKey, list[Session]]:
     """Group sessions by (start-date, bucket-name); sort each bucket by start_ts."""
     groups: dict[GroupKey, list[Session]] = defaultdict(list)
     for session in sessions:

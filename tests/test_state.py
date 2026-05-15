@@ -66,6 +66,7 @@ def test_save_creates_parent_dir(tmp_path: Path) -> None:
 
 def test_save_payload_includes_version(tmp_path: Path) -> None:
     import json
+
     p = tmp_path / "state.json"
     save_state(SyncState(), p)
     payload = json.loads(p.read_text())

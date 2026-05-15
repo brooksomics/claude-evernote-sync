@@ -128,6 +128,7 @@ def test_make_destination_email_backend() -> None:
         mock_load.return_value = MagicMock()
         dest = make_destination(config)
     from claude_evernote_sync.destinations.email import EmailDestination
+
     assert isinstance(dest, EmailDestination)
 
 
@@ -136,6 +137,7 @@ def test_make_destination_api_backend() -> None:
     with patch("claude_evernote_sync.main.EvernoteSync"):
         dest = make_destination(config)
     from claude_evernote_sync.destinations.api import ApiDestination
+
     assert isinstance(dest, ApiDestination)
 
 
@@ -151,9 +153,11 @@ def test_run_dry_run_does_not_create_destination(tmp_path: Path) -> None:
 def test_run_calls_destination_when_not_dry(tmp_path: Path) -> None:
     config = Config(backend="email", projects_dir=tmp_path, days_back=30)
     _write_jsonl(tmp_path / "encoded" / "session-1.jsonl")
-    with patch("claude_evernote_sync.main.make_destination") as mock_make, \
-         patch("claude_evernote_sync.main.load_state") as mock_load_state, \
-         patch("claude_evernote_sync.main.save_state") as mock_save_state:
+    with (
+        patch("claude_evernote_sync.main.make_destination") as mock_make,
+        patch("claude_evernote_sync.main.load_state") as mock_load_state,
+        patch("claude_evernote_sync.main.save_state") as mock_save_state,
+    ):
         dest = MagicMock()
         dest.sync_group.return_value = {"u1"}
         mock_make.return_value = dest

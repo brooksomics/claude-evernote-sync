@@ -1,5 +1,9 @@
 # claude-evernote-sync
 
+[![CI](https://github.com/brooksomics/claude-evernote-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/brooksomics/claude-evernote-sync/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Python: 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
+
 Automatically sync [Claude Code](https://claude.com/claude-code) CLI conversations to Evernote as daily rollup notes, grouped by project.
 
 Each git repo gets one note per day. A four-hour conversation lands in **one** note that grows hourly — not four separate notes.
@@ -229,19 +233,30 @@ Your conversations transit Gmail's servers en route to Evernote. If you'd rather
 
 ## Development
 
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full setup. Quick version:
+
 ```bash
-uv run pytest                  # full suite, coverage report
-uv run ruff check src/ tests/  # lint
-uv run mypy src/               # type-check
+git clone https://github.com/brooksomics/claude-evernote-sync.git
+cd claude-evernote-sync
+uv sync
+pre-commit install               # installs the git hook
+uv run pytest                    # full suite, coverage report
 ```
 
-Quality gates enforced:
+Quality gates enforced by CI:
 - 20 lines per function (max)
 - 3 params per function (max)
 - 2 nesting levels (max)
 - 200 lines per file (max)
 - 10 functions per file (max)
-- 80% test coverage (min)
+- 80% branch coverage (min)
+- Strict mypy + ruff lint + ruff format
+
+Secret scanning via `gitleaks` runs on every commit and CI build.
+
+## Security
+
+See [SECURITY.md](./SECURITY.md) for the threat model and how to report a vulnerability.
 
 ## License
 

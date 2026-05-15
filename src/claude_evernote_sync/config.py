@@ -18,9 +18,7 @@ class Config:
     notebook_overrides: dict[str, str] = field(default_factory=dict)
     developer_token: str = ""
     api_host: str = "www.evernote.com"
-    projects_dir: Path = field(
-        default_factory=lambda: Path("~/.claude/projects").expanduser()
-    )
+    projects_dir: Path = field(default_factory=lambda: Path("~/.claude/projects").expanduser())
     days_back: int = 2
     rollup_overrides: list[str] = field(default_factory=list)
 

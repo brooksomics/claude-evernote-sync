@@ -43,8 +43,7 @@ class SyncContext:
     @property
     def sessions_with_new(self) -> list[tuple[Session, list[Message]]]:
         return [
-            (s, [m for m in s.messages if m.uuid not in self.synced_uuids])
-            for s in self.sessions
+            (s, [m for m in s.messages if m.uuid not in self.synced_uuids]) for s in self.sessions
         ]
 
 

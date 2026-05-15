@@ -71,9 +71,7 @@ def test_email_destination_skips_when_no_new(creds: GmailCredentials) -> None:
 
 def test_email_destination_first_sync_creates(creds: GmailCredentials) -> None:
     s = _session("s", [_msg("u1", "user", 10), _msg("u2", "assistant", 11)])
-    ctx = SyncContext(
-        "2026-05-15", "myrepo", [s], synced_uuids=set(), notebook_name="MyBox"
-    )
+    ctx = SyncContext("2026-05-15", "myrepo", [s], synced_uuids=set(), notebook_name="MyBox")
     dest = EmailDestination(creds=creds)
     with patch("claude_evernote_sync.destinations.email.send") as mock_send:
         result = dest.sync_group(ctx)
@@ -114,9 +112,7 @@ def test_api_destination_calls_upsert() -> None:
     client = MagicMock()
     client.get_or_create_notebook.return_value = "nb-guid"
     s = _session("s", [_msg("u1", "user", 10), _msg("u2", "assistant", 11)])
-    ctx = SyncContext(
-        "2026-05-15", "myrepo", [s], synced_uuids=set(), notebook_name="MyBox"
-    )
+    ctx = SyncContext("2026-05-15", "myrepo", [s], synced_uuids=set(), notebook_name="MyBox")
     dest = ApiDestination(client=client)
     result = dest.sync_group(ctx)
     client.get_or_create_notebook.assert_called_once_with("MyBox")

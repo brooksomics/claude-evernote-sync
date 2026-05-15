@@ -20,15 +20,15 @@ def test_load_config_minimal(tmp_path: Path) -> None:
 def test_load_config_full(tmp_path: Path) -> None:
     cfg_path = tmp_path / "config.toml"
     cfg_path.write_text(
-        '[evernote]\n'
+        "[evernote]\n"
         'backend = "api"\n'
         'developer_token = "tok"\n'
         'api_host = "sandbox.evernote.com"\n'
         'notebook_name = "MyNotebook"\n'
-        '[scan]\n'
+        "[scan]\n"
         'projects_dir = "~/x"\n'
-        'days_back = 5\n'
-        '[grouping]\n'
+        "days_back = 5\n"
+        "[grouping]\n"
         'rollup_overrides = ["/a/b", "/c/d"]\n'
     )
     config = load_config(cfg_path)
@@ -80,7 +80,7 @@ def test_load_config_notebook_overrides(tmp_path: Path) -> None:
     cfg_path = tmp_path / "config.toml"
     cfg_path.write_text(
         '[evernote]\nbackend = "email"\n'
-        '[notebook_overrides]\n'
+        "[notebook_overrides]\n"
         '"tile-ai" = "TileAI Notes"\n'
         'biotech_jobs = "Job Search"\n'
     )
