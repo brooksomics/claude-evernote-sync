@@ -25,8 +25,16 @@ def xml_escape(text: str) -> str:
 
 
 def note_title(bucket: str, date_iso: str) -> str:
-    """Build the canonical note title for a (bucket, date) pair."""
-    return f"Claude Sessions — {bucket} — {date_iso}"
+    """Build the canonical note title for a (bucket, date) pair.
+
+    Separators are ASCII hyphens, not em-dashes. Non-ASCII chars in the SMTP
+    Subject header trigger RFC 2047 quoted-printable encoding of the whole
+    header, which encodes the `@` and `+` directives as `=40` and `=2B`.
+    Evernote's email-to-note parser scans the raw header for a literal `@`,
+    fails to find it, and silently routes the email to the default notebook
+    instead of the one named after `@`.
+    """
+    return f"Claude Sessions - {bucket} - {date_iso}"
 
 
 def _render_paragraph(text: str) -> str:
