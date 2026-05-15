@@ -45,7 +45,17 @@ def simple_session() -> Session:
 
 
 def test_note_title_format() -> None:
-    assert note_title("myrepo", "2026-05-15") == "Claude Sessions — myrepo — 2026-05-15"
+    """Separator must be ASCII hyphen, not em-dash, to keep the SMTP Subject
+    header unencoded so Evernote's @notebook parser can see the literal `@`."""
+    assert note_title("myrepo", "2026-05-15") == "Claude Sessions - myrepo - 2026-05-15"
+
+
+def test_note_title_is_ascii_only() -> None:
+    """The full title must encode cleanly as ASCII; otherwise SMTP Subject
+    headers get RFC 2047 quoted-printable encoded and Evernote silently
+    routes the note to the user's default notebook."""
+    title = note_title("myrepo", "2026-05-15")
+    title.encode("ascii")  # raises UnicodeEncodeError if any non-ASCII slips in
 
 
 def test_note_title_handles_special_chars() -> None:
