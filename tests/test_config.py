@@ -93,3 +93,24 @@ def test_load_config_no_overrides_section(tmp_path: Path) -> None:
     cfg_path.write_text('[evernote]\nbackend = "email"\n')
     config = load_config(cfg_path)
     assert config.notebook_overrides == {}
+
+
+def test_load_config_display_timezone_default(tmp_path: Path) -> None:
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text('[evernote]\nbackend = "email"\n')
+    assert load_config(cfg_path).display_timezone == "UTC"
+
+
+def test_load_config_display_timezone_iana(tmp_path: Path) -> None:
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text(
+        '[evernote]\nbackend = "email"\n[display]\ntimezone = "America/Los_Angeles"\n'
+    )
+    assert load_config(cfg_path).display_timezone == "America/Los_Angeles"
+
+
+def test_load_config_invalid_timezone_rejected(tmp_path: Path) -> None:
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text('[evernote]\nbackend = "email"\n[display]\ntimezone = "Not/A_Real_TZ"\n')
+    with pytest.raises(ValueError, match=r"Invalid display\.timezone"):
+        load_config(cfg_path)
