@@ -15,7 +15,7 @@ from claude_evernote_sync.destinations import Destination, SyncContext
 from claude_evernote_sync.destinations.api import ApiDestination
 from claude_evernote_sync.destinations.email import EmailDestination
 from claude_evernote_sync.evernote_client import EvernoteSync
-from claude_evernote_sync.formatter import note_title
+from claude_evernote_sync.formatter import Renderer, note_title, resolve_timezone
 from claude_evernote_sync.grouping import GroupKey, group_sessions
 from claude_evernote_sync.parser import Session, parse_jsonl_file
 from claude_evernote_sync.state import SyncState, load_state, save_state
@@ -39,10 +39,11 @@ def parse_all(paths: list[Path]) -> list[Session]:
 
 def make_destination(config: Config) -> Destination:
     """Instantiate the destination selected by `config.backend`."""
+    renderer = Renderer(timezone=resolve_timezone(config.display_timezone))
     if config.backend == "email":
-        return EmailDestination(creds=load_credentials())
+        return EmailDestination(creds=load_credentials(), renderer=renderer)
     client = EvernoteSync(config.developer_token, config.api_host)
-    return ApiDestination(client=client)
+    return ApiDestination(client=client, renderer=renderer)
 
 
 @dataclass

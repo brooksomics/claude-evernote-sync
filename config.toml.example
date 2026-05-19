@@ -35,6 +35,19 @@ projects_dir = "~/.claude/projects"
 # bump (or use --backfill) for initial historical sync.
 days_back = 2
 
+[display]
+# Timezone for timestamps inside the rendered notes (the "Update at HH:MM"
+# marker on append emails, per-message timestamps, session start/end times).
+#
+# Accepts:
+#   - "UTC" (default — no conversion)
+#   - "local" — your Mac's current system timezone
+#   - any IANA name, e.g. "America/Los_Angeles", "Europe/London", "Asia/Tokyo"
+#
+# IANA timezones handle DST automatically (PST/PDT, GMT/BST, etc.) — prefer
+# them over a fixed offset string.
+timezone = "UTC"
+
 [grouping]
 # By default, each session is rolled up under its git repo root's basename.
 # A session in a non-git directory uses that directory's name.
