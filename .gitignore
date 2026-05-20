@@ -30,3 +30,10 @@ sync_state.json
 sync.log
 launchd.out.log
 launchd.err.log
+
+# Beads local state (issues.jsonl is the committed source of truth)
+.beads/.local_version
+.beads/backup/
+.beads/embeddeddolt/
+.beads/export-state.json
+.beads/last-touched
