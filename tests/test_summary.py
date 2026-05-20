@@ -4,8 +4,11 @@ from pathlib import Path
 
 from claude_evernote_sync.parser import parse_jsonl_file
 from claude_evernote_sync.summary import (
+    AiTitleRecord,
     SummaryRecord,
+    attach_ai_titles,
     attach_cross_file_summaries,
+    extract_ai_title_records,
     extract_summary_records,
 )
 
@@ -134,3 +137,93 @@ def test_attach_summary_does_not_overwrite_existing(tmp_path: Path) -> None:
     assert session is not None
     attach_cross_file_summaries([session], extract_summary_records(p))
     assert session.summary == "first"
+
+
+def test_ai_title_record_dataclass() -> None:
+    rec = AiTitleRecord(session_id="abc", title="Refactor user auth")
+    assert rec.session_id == "abc"
+    assert rec.title == "Refactor user auth"
+
+
+def test_extract_ai_title_records(tmp_path: Path) -> None:
+    lines = [
+        '{"type":"user","uuid":"u1","timestamp":"2026-05-15T10:00:00.000Z",'
+        '"cwd":"/x","sessionId":"s1","message":{"role":"user","content":"hi"}}',
+        '{"type":"ai-title","aiTitle":"My Topic","sessionId":"s1"}',
+    ]
+    p = tmp_path / "with_title.jsonl"
+    p.write_text("\n".join(lines))
+    records = extract_ai_title_records(p)
+    assert len(records) == 1
+    assert records[0].session_id == "s1"
+    assert records[0].title == "My Topic"
+
+
+def test_extract_ai_title_drops_records_missing_fields(tmp_path: Path) -> None:
+    lines = [
+        '{"type":"ai-title","aiTitle":"missing session id"}',
+        '{"type":"ai-title","sessionId":"s2"}',
+        '{"type":"ai-title","aiTitle":"valid","sessionId":"s3"}',
+    ]
+    p = tmp_path / "partial.jsonl"
+    p.write_text("\n".join(lines))
+    records = extract_ai_title_records(p)
+    assert len(records) == 1
+    assert records[0].session_id == "s3"
+
+
+def test_attach_ai_titles_by_session_id(tmp_path: Path) -> None:
+    """ai-title records key on sessionId directly (no leafUuid contamination).
+
+    In production Claude Code writes JSONL files named <sessionId>.jsonl,
+    so Session.session_id (derived from the filename) equals the sessionId
+    field on each record.
+    """
+    lines = [
+        '{"type":"user","uuid":"u1","timestamp":"2026-05-15T10:00:00.000Z",'
+        '"cwd":"/x","sessionId":"my-session","message":{"role":"user","content":"hi"}}',
+        '{"type":"ai-title","aiTitle":"Research X","sessionId":"my-session"}',
+    ]
+    p = tmp_path / "my-session.jsonl"
+    p.write_text("\n".join(lines))
+    session = parse_jsonl_file(p)
+    assert session is not None
+    attach_ai_titles([session], extract_ai_title_records(p))
+    assert session.summary == "Research X"
+
+
+def test_attach_ai_titles_last_wins_when_duplicated(tmp_path: Path) -> None:
+    """Claude Code writes the same ai-title repeatedly; the last (latest) wins."""
+    lines = [
+        '{"type":"user","uuid":"u1","timestamp":"2026-05-15T10:00:00.000Z",'
+        '"cwd":"/x","sessionId":"dup","message":{"role":"user","content":"hi"}}',
+        '{"type":"ai-title","aiTitle":"initial topic","sessionId":"dup"}',
+        '{"type":"ai-title","aiTitle":"refined topic","sessionId":"dup"}',
+    ]
+    p = tmp_path / "dup.jsonl"
+    p.write_text("\n".join(lines))
+    session = parse_jsonl_file(p)
+    assert session is not None
+    attach_ai_titles([session], extract_ai_title_records(p))
+    assert session.summary == "refined topic"
+
+
+def test_attach_ai_titles_overrides_existing_summary(tmp_path: Path) -> None:
+    """ai-title is treated as more authoritative than a cross-file summary
+    record (sessionId keying is unambiguous; leafUuid matching is best-effort)."""
+    lines = [
+        '{"type":"user","uuid":"u1","timestamp":"2026-05-15T10:00:00.000Z",'
+        '"cwd":"/x","sessionId":"s","message":{"role":"user","content":"hi"}}',
+    ]
+    p = tmp_path / "s.jsonl"
+    p.write_text("\n".join(lines))
+    session = parse_jsonl_file(p)
+    assert session is not None
+    session.summary = "from-summary-record"
+    attach_ai_titles([session], [AiTitleRecord(session_id="s", title="from-ai-title")])
+    assert session.summary == "from-ai-title"
+
+
+def test_attach_ai_titles_ignores_unknown_session() -> None:
+    """An ai-title record for a session we don't have is silently dropped."""
+    attach_ai_titles([], [AiTitleRecord(session_id="ghost", title="orphan")])
