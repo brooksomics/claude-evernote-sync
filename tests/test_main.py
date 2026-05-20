@@ -249,3 +249,46 @@ def test_run_limit_larger_than_available_is_clamped(tmp_path: Path) -> None:
         mock_load_state.return_value = SyncState()
         run(config, dry_run=False)
     assert _captured_session_ids(dest) == ["session-a"]
+
+
+def test_sync_all_force_resends_already_synced_session() -> None:
+    """force=True clears the per-session record before each sync, so the
+    destination sees the session as a fresh first-sync and re-sends every
+    message. Combined with --limit, this lets users re-render a small
+    sample after deleting the existing notes in Evernote."""
+    dest = MagicMock()
+    dest.sync_session.return_value = {"u-s1"}
+    state = SyncState()
+    state.mark_synced("s1", ["u-s1"], title="Stale Title - x - s1abcd")
+    config = Config(force=True)
+    SyncJob(destination=dest, state=state, config=config).sync_all([_session()])
+    ctx_arg: SyncContext = dest.sync_session.call_args.args[0]
+    assert ctx_arg.synced_uuids == set()
+    assert ctx_arg.is_first_sync
+
+
+def test_sync_all_force_redrives_title_from_session() -> None:
+    """force=True ignores the stale locked title and re-derives from the
+    current Session (its summary / first-prompt / fallback)."""
+    dest = MagicMock()
+    dest.sync_session.return_value = set()
+    state = SyncState()
+    state.mark_synced("s1", ["u-s1"], title="Stale Title - x - s1abcd")
+    s = _session()
+    s.summary = "Refreshed Topic"
+    SyncJob(destination=dest, state=state, config=Config(force=True)).sync_all([s])
+    ctx_arg: SyncContext = dest.sync_session.call_args.args[0]
+    assert ctx_arg.title.startswith("Refreshed Topic - ")
+
+
+def test_sync_all_without_force_keeps_locked_title() -> None:
+    """Confirms the non-force path is unchanged after the force feature lands."""
+    dest = MagicMock()
+    dest.sync_session.return_value = set()
+    state = SyncState()
+    state.mark_synced("s1", ["u-s1"], title="Locked Title - x - s1abcdef")
+    s = _session()
+    s.summary = "DIFFERENT"
+    SyncJob(destination=dest, state=state, config=Config(force=False)).sync_all([s])
+    ctx_arg: SyncContext = dest.sync_session.call_args.args[0]
+    assert ctx_arg.title == "Locked Title - x - s1abcdef"

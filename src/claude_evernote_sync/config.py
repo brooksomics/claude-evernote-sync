@@ -23,6 +23,7 @@ class Config:
     rollup_overrides: list[str] = field(default_factory=list)
     display_timezone: str = "UTC"
     limit: int | None = None
+    force: bool = False
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
