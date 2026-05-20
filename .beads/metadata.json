@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "claude_evernote_sync",
+  "project_id": "cb83c400-33f9-4913-b402-4aa68949160e"
+}
