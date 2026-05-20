@@ -22,6 +22,7 @@ class Config:
     days_back: int = 2
     rollup_overrides: list[str] = field(default_factory=list)
     display_timezone: str = "UTC"
+    limit: int | None = None
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:

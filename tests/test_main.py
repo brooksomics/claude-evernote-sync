@@ -23,7 +23,7 @@ def _write_jsonl(path: Path, ts: str = "2026-05-15T10:00:00.000Z") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     line = {
         "type": "user",
-        "uuid": "u",
+        "uuid": f"u-{path.stem}",
         "timestamp": ts,
         "cwd": "/x/myrepo",
         "sessionId": path.stem,
@@ -165,3 +165,84 @@ def test_run_calls_destination_when_not_dry(tmp_path: Path) -> None:
         run(config, dry_run=False)
     dest.sync_group.assert_called_once()
     mock_save_state.assert_called_once()
+
+
+def _captured_session_ids(dest: MagicMock) -> list[str]:
+    """Collect every session_id passed in any sync_group call's SyncContext."""
+    out: list[str] = []
+    for call in dest.sync_group.call_args_list:
+        out.extend(s.session_id for s in call.args[0].sessions)
+    return out
+
+
+def test_run_respects_limit(tmp_path: Path) -> None:
+    """config.limit=N restricts sync to the N most-recently-active sessions."""
+    config = Config(backend="email", projects_dir=tmp_path, days_back=365, limit=2)
+    _write_jsonl(tmp_path / "session-old.jsonl", ts="2026-05-01T10:00:00.000Z")
+    _write_jsonl(tmp_path / "session-mid.jsonl", ts="2026-05-10T10:00:00.000Z")
+    _write_jsonl(tmp_path / "session-new.jsonl", ts="2026-05-20T10:00:00.000Z")
+    with (
+        patch("claude_evernote_sync.main.make_destination") as mock_make,
+        patch("claude_evernote_sync.main.load_state") as mock_load_state,
+        patch("claude_evernote_sync.main.save_state"),
+    ):
+        dest = MagicMock()
+        dest.sync_group.return_value = set()
+        mock_make.return_value = dest
+        mock_load_state.return_value = SyncState()
+        run(config, dry_run=False)
+    synced = _captured_session_ids(dest)
+    assert sorted(synced) == ["session-mid", "session-new"]
+
+
+def test_run_no_limit_syncs_all(tmp_path: Path) -> None:
+    """config.limit=None (the default) leaves all sessions in scope."""
+    config = Config(backend="email", projects_dir=tmp_path, days_back=365)
+    _write_jsonl(tmp_path / "session-a.jsonl", ts="2026-05-01T10:00:00.000Z")
+    _write_jsonl(tmp_path / "session-b.jsonl", ts="2026-05-10T10:00:00.000Z")
+    _write_jsonl(tmp_path / "session-c.jsonl", ts="2026-05-20T10:00:00.000Z")
+    with (
+        patch("claude_evernote_sync.main.make_destination") as mock_make,
+        patch("claude_evernote_sync.main.load_state") as mock_load_state,
+        patch("claude_evernote_sync.main.save_state"),
+    ):
+        dest = MagicMock()
+        dest.sync_group.return_value = set()
+        mock_make.return_value = dest
+        mock_load_state.return_value = SyncState()
+        run(config, dry_run=False)
+    assert sorted(_captured_session_ids(dest)) == ["session-a", "session-b", "session-c"]
+
+
+def test_run_limit_zero_syncs_nothing(tmp_path: Path) -> None:
+    """config.limit=0 means zero sessions sent."""
+    config = Config(backend="email", projects_dir=tmp_path, days_back=365, limit=0)
+    _write_jsonl(tmp_path / "session-a.jsonl", ts="2026-05-20T10:00:00.000Z")
+    with (
+        patch("claude_evernote_sync.main.make_destination") as mock_make,
+        patch("claude_evernote_sync.main.load_state") as mock_load_state,
+        patch("claude_evernote_sync.main.save_state"),
+    ):
+        dest = MagicMock()
+        dest.sync_group.return_value = set()
+        mock_make.return_value = dest
+        mock_load_state.return_value = SyncState()
+        run(config, dry_run=False)
+    dest.sync_group.assert_not_called()
+
+
+def test_run_limit_larger_than_available_is_clamped(tmp_path: Path) -> None:
+    """If limit > available sessions, all sessions are kept (no error)."""
+    config = Config(backend="email", projects_dir=tmp_path, days_back=365, limit=99)
+    _write_jsonl(tmp_path / "session-a.jsonl", ts="2026-05-20T10:00:00.000Z")
+    with (
+        patch("claude_evernote_sync.main.make_destination") as mock_make,
+        patch("claude_evernote_sync.main.load_state") as mock_load_state,
+        patch("claude_evernote_sync.main.save_state"),
+    ):
+        dest = MagicMock()
+        dest.sync_group.return_value = set()
+        mock_make.return_value = dest
+        mock_load_state.return_value = SyncState()
+        run(config, dry_run=False)
+    assert _captured_session_ids(dest) == ["session-a"]
