@@ -84,6 +84,9 @@ def run(config: Config, dry_run: bool = False) -> int:
     paths = discover_jsonl_files(config.projects_dir, config.days_back)
     logger.info("found %d JSONL files within %d days", len(paths), config.days_back)
     sessions = parse_all(paths)
+    if config.limit is not None:
+        sessions = sorted(sessions, key=lambda s: s.end_ts, reverse=True)[: max(0, config.limit)]
+        logger.info("limit=%d applied — %d sessions selected", config.limit, len(sessions))
     groups = group_sessions(sessions, config.rollup_overrides)
     logger.info("parsed %d sessions into %d groups", len(sessions), len(groups))
     if dry_run:
@@ -115,6 +118,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
     p.add_argument("--dry-run", action="store_true", help="Show what would be synced")
     p.add_argument("--days", type=int, help="Override config days_back")
+    p.add_argument("--limit", type=int, help="Sync at most N most-recently-active sessions")
     p.add_argument("--backfill", action="store_true", help="Sync all history")
     p.add_argument("-v", "--verbose", action="store_true")
     return p.parse_args(argv)
@@ -132,5 +136,7 @@ def cli(argv: list[str] | None = None) -> int:
         config.days_back = 365 * 10
     elif args.days is not None:
         config.days_back = args.days
+    if args.limit is not None:
+        config.limit = args.limit
     run(config, dry_run=args.dry_run)
     return 0
