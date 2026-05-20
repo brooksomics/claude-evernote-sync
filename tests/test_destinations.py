@@ -29,6 +29,17 @@ def _session(session_id: str, messages: list[Message]) -> Session:
     )
 
 
+def _ctx(session: Session, **kwargs: object) -> SyncContext:
+    defaults: dict[str, object] = {
+        "bucket": "myrepo",
+        "title": "Topic - myrepo - abc12345",
+        "synced_uuids": set(),
+        "notebook_name": "MyBox",
+    }
+    defaults.update(kwargs)
+    return SyncContext(session=session, **defaults)  # type: ignore[arg-type]
+
+
 @pytest.fixture
 def creds() -> GmailCredentials:
     return GmailCredentials(
@@ -38,70 +49,58 @@ def creds() -> GmailCredentials:
 
 def test_context_new_messages() -> None:
     s = _session("s", [_msg("u1", "user", 10), _msg("u2", "assistant", 11)])
-    ctx = SyncContext("2026-05-15", "x", [s], synced_uuids={"u1"})
+    ctx = _ctx(s, synced_uuids={"u1"})
     assert [m.uuid for m in ctx.new_messages] == ["u2"]
 
 
 def test_context_is_first_sync() -> None:
     s = _session("s", [_msg("u1", "user", 10)])
-    fresh = SyncContext("2026-05-15", "x", [s], synced_uuids=set())
-    seen = SyncContext("2026-05-15", "x", [s], synced_uuids={"u1"})
+    fresh = _ctx(s, synced_uuids=set())
+    seen = _ctx(s, synced_uuids={"u1"})
     assert fresh.is_first_sync
     assert not seen.is_first_sync
 
 
-def test_context_sessions_with_new() -> None:
-    s1 = _session("s1", [_msg("a", "user", 10)])
-    s2 = _session("s2", [_msg("b", "user", 11), _msg("c", "assistant", 12)])
-    ctx = SyncContext("2026-05-15", "x", [s1, s2], synced_uuids={"a"})
-    pairs = ctx.sessions_with_new
-    assert pairs[0][1] == []
-    assert [m.uuid for m in pairs[1][1]] == ["b", "c"]
-
-
 def test_email_destination_skips_when_no_new(creds: GmailCredentials) -> None:
     s = _session("s", [_msg("u1", "user", 10)])
-    ctx = SyncContext("2026-05-15", "x", [s], synced_uuids={"u1"})
+    ctx = _ctx(s, synced_uuids={"u1"})
     dest = EmailDestination(creds=creds)
     with patch("claude_evernote_sync.destinations.email.send") as mock_send:
-        result = dest.sync_group(ctx)
+        result = dest.sync_session(ctx)
     mock_send.assert_not_called()
     assert result == set()
 
 
 def test_email_destination_first_sync_creates(creds: GmailCredentials) -> None:
     s = _session("s", [_msg("u1", "user", 10), _msg("u2", "assistant", 11)])
-    ctx = SyncContext("2026-05-15", "myrepo", [s], synced_uuids=set(), notebook_name="MyBox")
+    ctx = _ctx(s, title="My Topic - myrepo - sabc1234")
     dest = EmailDestination(creds=creds)
     with patch("claude_evernote_sync.destinations.email.send") as mock_send:
-        result = dest.sync_group(ctx)
+        result = dest.sync_session(ctx)
     args, _ = mock_send.call_args
     note = args[1]
     assert note.append is False
     assert note.notebook == "MyBox"
-    assert "Claude Sessions" in note.title
-    assert "myrepo" in note.title
+    assert note.title == "My Topic - myrepo - sabc1234"
     assert result == {"u1", "u2"}
 
 
-def test_email_destination_uses_per_bucket_notebook(creds: GmailCredentials) -> None:
+def test_email_destination_uses_notebook_name(creds: GmailCredentials) -> None:
     s = _session("s", [_msg("u1", "user", 10)])
-    ctx = SyncContext(
-        "2026-05-15", "tile-ai", [s], synced_uuids=set(), notebook_name="TileAI Notes"
-    )
+    ctx = _ctx(s, notebook_name="TileAI Notes")
     dest = EmailDestination(creds=creds)
     with patch("claude_evernote_sync.destinations.email.send") as mock_send:
-        dest.sync_group(ctx)
+        dest.sync_session(ctx)
     args, _ = mock_send.call_args
     assert args[1].notebook == "TileAI Notes"
 
 
 def test_email_destination_subsequent_sync_appends(creds: GmailCredentials) -> None:
     s = _session("s", [_msg("u1", "user", 10), _msg("u2", "assistant", 11)])
-    ctx = SyncContext("2026-05-15", "x", [s], synced_uuids={"u1"})
+    ctx = _ctx(s, synced_uuids={"u1"})
     dest = EmailDestination(creds=creds)
     with patch("claude_evernote_sync.destinations.email.send") as mock_send:
-        result = dest.sync_group(ctx)
+        result = dest.sync_session(ctx)
     args, _ = mock_send.call_args
     note = args[1]
     assert note.append is True
@@ -112,25 +111,25 @@ def test_api_destination_calls_upsert() -> None:
     client = MagicMock()
     client.get_or_create_notebook.return_value = "nb-guid"
     s = _session("s", [_msg("u1", "user", 10), _msg("u2", "assistant", 11)])
-    ctx = SyncContext("2026-05-15", "myrepo", [s], synced_uuids=set(), notebook_name="MyBox")
+    ctx = _ctx(s, title="Locked Title - myrepo - sabc1234")
     dest = ApiDestination(client=client)
-    result = dest.sync_group(ctx)
+    result = dest.sync_session(ctx)
     client.get_or_create_notebook.assert_called_once_with("MyBox")
     client.upsert_note.assert_called_once()
     args, _ = client.upsert_note.call_args
     assert args[0] == "nb-guid"
-    assert "myrepo" in args[1]
+    assert args[1] == "Locked Title - myrepo - sabc1234"
     assert result == {"u1", "u2"}
 
 
 def test_api_destination_ignores_synced_state() -> None:
-    """API destination is idempotent — re-syncs the full group each time."""
+    """API destination is idempotent — re-syncs the full session each time."""
     client = MagicMock()
     client.get_or_create_notebook.return_value = "nb-guid"
     s = _session("s", [_msg("u1", "user", 10), _msg("u2", "assistant", 11)])
-    ctx = SyncContext("2026-05-15", "x", [s], synced_uuids={"u1", "u2"})
+    ctx = _ctx(s, synced_uuids={"u1", "u2"})
     dest = ApiDestination(client=client)
-    result = dest.sync_group(ctx)
+    result = dest.sync_session(ctx)
     client.upsert_note.assert_called_once()
     assert result == {"u1", "u2"}
 
@@ -141,9 +140,9 @@ def test_api_destination_caches_notebook_guid() -> None:
     client.get_or_create_notebook.return_value = "nb-guid"
     s1 = _session("s1", [_msg("u1", "user", 10)])
     s2 = _session("s2", [_msg("u2", "user", 11)])
-    ctx1 = SyncContext("2026-05-15", "a", [s1], synced_uuids=set(), notebook_name="MyBox")
-    ctx2 = SyncContext("2026-05-15", "b", [s2], synced_uuids=set(), notebook_name="MyBox")
+    ctx1 = _ctx(s1)
+    ctx2 = _ctx(s2)
     dest = ApiDestination(client=client)
-    dest.sync_group(ctx1)
-    dest.sync_group(ctx2)
+    dest.sync_session(ctx1)
+    dest.sync_session(ctx2)
     assert client.get_or_create_notebook.call_count == 1

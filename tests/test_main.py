@@ -34,15 +34,16 @@ def _write_jsonl(path: Path, ts: str = "2026-05-15T10:00:00.000Z") -> None:
     path.write_text(json.dumps(line) + "\n")
 
 
-def _session() -> Session:
+def _session(session_id: str = "s1", cwd: str = "/x/myrepo") -> Session:
+    ts = datetime(2026, 5, 15, 10, 0, tzinfo=UTC)
     return Session(
-        session_id="s1",
-        cwd="/x/myrepo",
+        session_id=session_id,
+        cwd=cwd,
         git_branch="main",
         version="1.0",
-        start_ts=datetime(2026, 5, 15, 10, 0, tzinfo=UTC),
+        start_ts=ts,
         end_ts=datetime(2026, 5, 15, 10, 5, tzinfo=UTC),
-        messages=[Message("u1", "user", "hi", datetime(2026, 5, 15, 10, 0, tzinfo=UTC))],
+        messages=[Message(f"u-{session_id}", "user", "hi", ts)],
     )
 
 
@@ -76,49 +77,59 @@ def test_parse_all_skips_unparseable(tmp_path: Path) -> None:
     assert len(sessions) == 1
 
 
-def test_sync_all_dispatches_to_destination() -> None:
+def test_sync_all_dispatches_per_session() -> None:
     dest = MagicMock()
-    dest.sync_group.return_value = {"u1"}
+    dest.sync_session.return_value = {"u-s1"}
     state = SyncState()
-    config = Config()
-    groups = {("2026-05-15", "myrepo"): [_session()]}
-    count = SyncJob(destination=dest, state=state, config=config).sync_all(groups)
+    count = SyncJob(destination=dest, state=state, config=Config()).sync_all([_session()])
     assert count == 1
-    dest.sync_group.assert_called_once()
-    assert state.synced_for(("2026-05-15", "myrepo")) == {"u1"}
+    dest.sync_session.assert_called_once()
+    assert state.synced_for("s1") == {"u-s1"}
 
 
 def test_sync_all_no_double_count_when_nothing_synced() -> None:
     dest = MagicMock()
-    dest.sync_group.return_value = set()
+    dest.sync_session.return_value = set()
     state = SyncState()
-    groups = {("2026-05-15", "x"): [_session()]}
-    assert SyncJob(destination=dest, state=state, config=Config()).sync_all(groups) == 0
+    assert SyncJob(destination=dest, state=state, config=Config()).sync_all([_session()]) == 0
 
 
-def test_sync_all_passes_synced_uuids_to_context() -> None:
+def test_sync_all_passes_locked_title_after_first_sync() -> None:
+    """Once a session has a locked title in state, subsequent syncs reuse it."""
     dest = MagicMock()
-    dest.sync_group.return_value = set()
+    dest.sync_session.return_value = set()
     state = SyncState()
-    state.mark_synced(("2026-05-15", "myrepo"), ["u1"])
-    groups = {("2026-05-15", "myrepo"): [_session()]}
-    SyncJob(destination=dest, state=state, config=Config()).sync_all(groups)
-    ctx_arg: SyncContext = dest.sync_group.call_args.args[0]
-    assert ctx_arg.synced_uuids == {"u1"}
+    state.mark_synced("s1", ["u-s1"], title="Locked Title - x - s1abcdef")
+    SyncJob(destination=dest, state=state, config=Config()).sync_all([_session()])
+    ctx_arg: SyncContext = dest.sync_session.call_args.args[0]
+    assert ctx_arg.title == "Locked Title - x - s1abcdef"
+    assert ctx_arg.synced_uuids == {"u-s1"}
 
 
-def test_sync_all_resolves_notebook_per_bucket() -> None:
+def test_sync_all_derives_title_on_first_sync() -> None:
+    """First sync: title is derived from session.summary or first prompt."""
     dest = MagicMock()
-    dest.sync_group.return_value = set()
+    dest.sync_session.return_value = set()
     state = SyncState()
-    config = Config(notebook_name="default-nb", notebook_overrides={"myrepo": "RepoNotes"})
-    groups = {
-        ("2026-05-15", "myrepo"): [_session()],
-        ("2026-05-15", "other"): [_session()],
-    }
-    SyncJob(destination=dest, state=state, config=config).sync_all(groups)
-    calls = dest.sync_group.call_args_list
-    notebooks = {c.args[0].notebook_name for c in calls}
+    s = _session()
+    s.summary = "Refactor user auth"
+    SyncJob(destination=dest, state=state, config=Config()).sync_all([s])
+    ctx_arg: SyncContext = dest.sync_session.call_args.args[0]
+    assert ctx_arg.title.startswith("Refactor user auth - ")
+
+
+def test_sync_all_resolves_notebook_per_bucket(tmp_path: Path) -> None:
+    repo_a = tmp_path / "repoA"
+    repo_b = tmp_path / "repoB"
+    (repo_a / ".git").mkdir(parents=True)
+    (repo_b / ".git").mkdir(parents=True)
+    s_a = _session("sA", cwd=str(repo_a))
+    s_b = _session("sB", cwd=str(repo_b))
+    dest = MagicMock()
+    dest.sync_session.return_value = set()
+    config = Config(notebook_name="default-nb", notebook_overrides={"repoA": "RepoNotes"})
+    SyncJob(destination=dest, state=SyncState(), config=config).sync_all([s_a, s_b])
+    notebooks = {c.args[0].notebook_name for c in dest.sync_session.call_args_list}
     assert notebooks == {"RepoNotes", "default-nb"}
 
 
@@ -159,24 +170,20 @@ def test_run_calls_destination_when_not_dry(tmp_path: Path) -> None:
         patch("claude_evernote_sync.main.save_state") as mock_save_state,
     ):
         dest = MagicMock()
-        dest.sync_group.return_value = {"u1"}
+        dest.sync_session.return_value = {"u-session-1"}
         mock_make.return_value = dest
         mock_load_state.return_value = SyncState()
         run(config, dry_run=False)
-    dest.sync_group.assert_called_once()
+    dest.sync_session.assert_called_once()
     mock_save_state.assert_called_once()
 
 
 def _captured_session_ids(dest: MagicMock) -> list[str]:
-    """Collect every session_id passed in any sync_group call's SyncContext."""
-    out: list[str] = []
-    for call in dest.sync_group.call_args_list:
-        out.extend(s.session_id for s in call.args[0].sessions)
-    return out
+    """Collect every session.session_id passed in any sync_session call's SyncContext."""
+    return [call.args[0].session.session_id for call in dest.sync_session.call_args_list]
 
 
 def test_run_respects_limit(tmp_path: Path) -> None:
-    """config.limit=N restricts sync to the N most-recently-active sessions."""
     config = Config(backend="email", projects_dir=tmp_path, days_back=365, limit=2)
     _write_jsonl(tmp_path / "session-old.jsonl", ts="2026-05-01T10:00:00.000Z")
     _write_jsonl(tmp_path / "session-mid.jsonl", ts="2026-05-10T10:00:00.000Z")
@@ -187,16 +194,14 @@ def test_run_respects_limit(tmp_path: Path) -> None:
         patch("claude_evernote_sync.main.save_state"),
     ):
         dest = MagicMock()
-        dest.sync_group.return_value = set()
+        dest.sync_session.return_value = set()
         mock_make.return_value = dest
         mock_load_state.return_value = SyncState()
         run(config, dry_run=False)
-    synced = _captured_session_ids(dest)
-    assert sorted(synced) == ["session-mid", "session-new"]
+    assert sorted(_captured_session_ids(dest)) == ["session-mid", "session-new"]
 
 
 def test_run_no_limit_syncs_all(tmp_path: Path) -> None:
-    """config.limit=None (the default) leaves all sessions in scope."""
     config = Config(backend="email", projects_dir=tmp_path, days_back=365)
     _write_jsonl(tmp_path / "session-a.jsonl", ts="2026-05-01T10:00:00.000Z")
     _write_jsonl(tmp_path / "session-b.jsonl", ts="2026-05-10T10:00:00.000Z")
@@ -207,7 +212,7 @@ def test_run_no_limit_syncs_all(tmp_path: Path) -> None:
         patch("claude_evernote_sync.main.save_state"),
     ):
         dest = MagicMock()
-        dest.sync_group.return_value = set()
+        dest.sync_session.return_value = set()
         mock_make.return_value = dest
         mock_load_state.return_value = SyncState()
         run(config, dry_run=False)
@@ -215,7 +220,6 @@ def test_run_no_limit_syncs_all(tmp_path: Path) -> None:
 
 
 def test_run_limit_zero_syncs_nothing(tmp_path: Path) -> None:
-    """config.limit=0 means zero sessions sent."""
     config = Config(backend="email", projects_dir=tmp_path, days_back=365, limit=0)
     _write_jsonl(tmp_path / "session-a.jsonl", ts="2026-05-20T10:00:00.000Z")
     with (
@@ -224,15 +228,14 @@ def test_run_limit_zero_syncs_nothing(tmp_path: Path) -> None:
         patch("claude_evernote_sync.main.save_state"),
     ):
         dest = MagicMock()
-        dest.sync_group.return_value = set()
+        dest.sync_session.return_value = set()
         mock_make.return_value = dest
         mock_load_state.return_value = SyncState()
         run(config, dry_run=False)
-    dest.sync_group.assert_not_called()
+    dest.sync_session.assert_not_called()
 
 
 def test_run_limit_larger_than_available_is_clamped(tmp_path: Path) -> None:
-    """If limit > available sessions, all sessions are kept (no error)."""
     config = Config(backend="email", projects_dir=tmp_path, days_back=365, limit=99)
     _write_jsonl(tmp_path / "session-a.jsonl", ts="2026-05-20T10:00:00.000Z")
     with (
@@ -241,7 +244,7 @@ def test_run_limit_larger_than_available_is_clamped(tmp_path: Path) -> None:
         patch("claude_evernote_sync.main.save_state"),
     ):
         dest = MagicMock()
-        dest.sync_group.return_value = set()
+        dest.sync_session.return_value = set()
         mock_make.return_value = dest
         mock_load_state.return_value = SyncState()
         run(config, dry_run=False)

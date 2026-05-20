@@ -1,12 +1,17 @@
-"""Extract and attach Claude Code's embedded session summaries.
+"""Extract and attach Claude Code's embedded session topic strings.
 
-Claude Code writes `{"type": "summary", "summary": ..., "leafUuid": ...}`
-records into JSONL files for its own /resume UI. We can use these as
-Evernote note titles without an extra LLM call.
+Two record types both serve as "what is this session about?" in different
+Claude Code versions:
 
-`leafUuid` points to a message UUID. We match summaries to sessions
-globally (across files) because Claude Code sometimes writes a summary
-for session A into session B's file — see anthropics/claude-code#2597.
+- `{"type": "summary", "summary": ..., "leafUuid": ...}` — the older /resume
+  format; leafUuid points to a message uuid and may end up in the wrong
+  session's file (anthropics/claude-code#2597), so matching is global.
+- `{"type": "ai-title", "aiTitle": ..., "sessionId": ...}` — the current
+  format used by the sidebar / sessions list. Keyed directly by sessionId,
+  so no cross-file contamination concern.
+
+ai-title is treated as more authoritative than summary because sessionId
+keying is unambiguous and Claude Code updates it as the session evolves.
 """
 
 from __future__ import annotations
@@ -24,6 +29,12 @@ class SummaryRecord:
     summary: str
 
 
+@dataclass(frozen=True)
+class AiTitleRecord:
+    session_id: str
+    title: str
+
+
 def extract_summary_records(path: Path) -> list[SummaryRecord]:
     """Read `type=summary` records from a JSONL file. Malformed lines are skipped."""
     out: list[SummaryRecord] = []
@@ -39,8 +50,23 @@ def extract_summary_records(path: Path) -> list[SummaryRecord]:
     return out
 
 
+def extract_ai_title_records(path: Path) -> list[AiTitleRecord]:
+    """Read `type=ai-title` records from a JSONL file. Malformed lines are skipped."""
+    out: list[AiTitleRecord] = []
+    if not path.exists():
+        return out
+    for record in _iter_records(path):
+        if record.get("type") != "ai-title":
+            continue
+        sid = record.get("sessionId")
+        title = record.get("aiTitle")
+        if isinstance(sid, str) and isinstance(title, str):
+            out.append(AiTitleRecord(session_id=sid, title=title))
+    return out
+
+
 def attach_cross_file_summaries(sessions: list[Session], summaries: list[SummaryRecord]) -> None:
-    """Match summaries to sessions via leafUuid → message_uuid → session.
+    """Match `type=summary` records to sessions via leafUuid → message_uuid → session.
 
     Mutates `Session.summary` in place. First match wins; subsequent
     matching records for the same session are ignored. Summaries whose
@@ -51,6 +77,20 @@ def attach_cross_file_summaries(sessions: list[Session], summaries: list[Summary
         target = uuid_to_session.get(record.leaf_uuid)
         if target and target.summary is None:
             target.summary = record.summary
+
+
+def attach_ai_titles(sessions: list[Session], ai_titles: list[AiTitleRecord]) -> None:
+    """Match `type=ai-title` records to sessions by sessionId.
+
+    Last record wins (Claude Code writes the title repeatedly, refining it
+    as the session evolves). Overrides any prior `session.summary` because
+    sessionId keying is more reliable than leafUuid matching.
+    """
+    by_id = {s.session_id: s for s in sessions}
+    for record in ai_titles:
+        target = by_id.get(record.session_id)
+        if target:
+            target.summary = record.title
 
 
 def _iter_records(path: Path) -> list[dict[str, object]]:

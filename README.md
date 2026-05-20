@@ -4,9 +4,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Python: 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 
-Automatically sync [Claude Code](https://claude.com/claude-code) CLI conversations to Evernote as daily rollup notes, grouped by project.
+Automatically sync [Claude Code](https://claude.com/claude-code) CLI conversations to Evernote as one note per session, titled by topic.
 
-Each git repo gets one note per day. A four-hour conversation lands in **one** note that grows hourly — not four separate notes.
+Each Claude Code session becomes a separate Evernote note. The note title is derived from the session's auto-generated summary (or first user prompt as fallback) so the list view actually tells you what each note is about. Long-running sessions append to the same note hourly rather than fragmenting across many.
 
 ## Why this exists
 
@@ -72,11 +72,12 @@ You should see lines like:
 
 ```
 found 44 JSONL files within 2 days
-parsed 44 sessions into 16 groups
-[dry-run] would sync: Claude Sessions — myrepo — 2026-05-15 (3 sessions)
+parsed 44 sessions
+[dry-run] would sync: Refactor user auth - myrepo - abc12345 (37 msgs)
+[dry-run] would sync: Help me debug deploy pipeline - tile-ai - def67890 (12 msgs)
 ```
 
-If the buckets look right, proceed.
+If the topics and buckets look right, proceed.
 
 ### 5. First real sync
 
@@ -109,11 +110,14 @@ For each Claude Code session JSONL:
 - **Included**: user prompts, assistant text responses, session metadata (project path, git branch, version, message count)
 - **Excluded**: tool calls (Bash, Read, Edit, etc.), tool results, thinking blocks, fenced code blocks
 
-Sessions are grouped by `(start-date, bucket)` where `bucket` is:
+Each session becomes one note. The note title has the form `<topic> - <bucket> - <short_id>`, where:
 
-1. The configured override path's basename if `cwd` is under one (see `rollup_overrides`)
-2. Else, the git repo root's basename
-3. Else, the immediate directory's basename
+- **topic** is the session's embedded summary (Claude Code writes these into the JSONL automatically), falling back to the first user prompt if no summary exists yet, then to the literal "Claude Session"
+- **bucket** is:
+  1. The configured override path's basename if `cwd` is under one (see `rollup_overrides`)
+  2. Else, the git repo root's basename
+  3. Else, the immediate directory's basename
+- **short_id** is the first 8 characters of the session UUID, so identical topics in the same bucket still produce distinct notes
 
 ## Configuration reference
 
@@ -162,16 +166,15 @@ claude-evernote-sync [--config PATH] [--dry-run] [--days N] [--limit N] [--backf
 
 ## How the "growing note" pattern works (email backend)
 
-State lives in `~/.claude-evernote-sync/sync_state.json` — a per-group set of message UUIDs that have already been emailed. Each hourly run:
+State lives in `~/.claude-evernote-sync/sync_state.json` — one record per session containing the set of message UUIDs that have already been emailed plus the title that was locked at first sync. Each hourly run:
 
-1. Walks all Claude Code sessions started in the last `days_back` days
-2. Groups them by `(start-date, bucket)`
-3. For each group, finds messages whose UUIDs aren't in state
-4. If the group has never been synced: sends a **create** email (`Subject @Notebook`) with the full content so far
-5. Otherwise: sends an **append** email (`Subject @Notebook +`) with only the new messages
-6. Marks those UUIDs as synced
+1. Walks all Claude Code sessions whose JSONL files were modified in the last `days_back` days
+2. For each session, finds messages whose UUIDs aren't in that session's record
+3. If the session has never been synced: derives a title, sends a **create** email (`Subject @Notebook`) with the full session content, and stores the title in state
+4. Otherwise: sends an **append** email (`Subject @Notebook +`) with only the new messages, reusing the stored title so the subject matches
+5. Marks those UUIDs as synced under that session's record
 
-Evernote's email-to-note rule for append: a `+` at the end of the subject line tells Evernote to append the body to the most recent note matching the title before the `+`. So note titles are deterministic and don't change between runs.
+Evernote's email-to-note rule for append: a `+` at the end of the subject line tells Evernote to append the body to the most recent note matching the title before the `+`. So the title is locked at first sync (kept in state) — later JSONL summary updates do not retitle the existing note, because the subject is also the matching key.
 
 ### State file size
 
@@ -184,18 +187,26 @@ The state file (`sync_state.json`) grows by roughly:
 
 A decade of heavy use lands around 90 MB — well under any practical concern, and parse time stays sub-second on modern SSDs.
 
-**The state file is safe to delete at any time**, but be aware of one caveat: after deletion, the next sync will treat every `(date, bucket)` group as a first sync and send `CREATE` emails. If matching notes already exist in Evernote (because they were synced previously), email-to-note will create **duplicate notes** alongside them rather than appending. To avoid duplicates after a state reset:
+**The state file is safe to delete at any time**, but be aware of one caveat: after deletion the next sync will treat every session in the lookback window as a first sync and send `CREATE` emails. If matching notes already exist in Evernote (because they were synced previously), email-to-note will create **duplicate notes** alongside them rather than appending. To avoid duplicates after a state reset:
 
 - Delete the affected notes in Evernote before re-syncing, OR
-- Limit the re-sync to brand-new content with `--days 1` so old groups aren't touched
+- Limit the re-sync to brand-new content with `--days 1 --limit 1` so only one or two sessions touch Evernote at a time
 
-There is no automatic pruning. If state growth ever becomes an actual problem, you can `rm ~/.claude-evernote-sync/sync_state.json` and accept the duplicate-note tradeoff for any re-synced historical groups.
+There is no automatic pruning. If state growth ever becomes an actual problem, you can `rm ~/.claude-evernote-sync/sync_state.json` and accept the duplicate-note tradeoff for any re-synced historical sessions.
+
+### Migrating from the old `(date, bucket)` rollup model
+
+Earlier versions of this tool grouped sessions into one note per `(date, bucket)` pair. The new per-session model uses a different state-file schema (`version: 2`); state files from before this change are silently discarded on load. After upgrading:
+
+- Old daily-rollup notes in Evernote remain as-is — they're frozen archives. The tool no longer writes to them.
+- The next sync (without `--limit 0`) will re-send every session in the lookback window as a new per-session note. Expect overlap between the old rollup notes and the new per-session notes for that window.
+- Easiest cleanup: delete the old `Claude Sessions - <bucket> - <date>` notes manually once you confirm the new per-session notes look right.
 
 ## Files written
 
 - `~/.claude-evernote-sync/config.toml` — your config (no secrets)
 - `~/.claude-evernote-sync/credentials.json` — Gmail + Evernote email (chmod 600; **gitignored**)
-- `~/.claude-evernote-sync/sync_state.json` — synced UUIDs per group
+- `~/.claude-evernote-sync/sync_state.json` — synced UUIDs and locked title per session
 - `~/.claude-evernote-sync/sync.log` — application log
 - `~/.claude-evernote-sync/launchd.out.log` — launchd stdout
 - `~/.claude-evernote-sync/launchd.err.log` — launchd stderr
