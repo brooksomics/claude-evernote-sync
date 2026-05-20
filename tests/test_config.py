@@ -114,3 +114,14 @@ def test_load_config_invalid_timezone_rejected(tmp_path: Path) -> None:
     cfg_path.write_text('[evernote]\nbackend = "email"\n[display]\ntimezone = "Not/A_Real_TZ"\n')
     with pytest.raises(ValueError, match=r"Invalid display\.timezone"):
         load_config(cfg_path)
+
+
+def test_config_default_notebook_prefix_is_empty() -> None:
+    """Backward-compat default: no prefix unless the user opts in."""
+    assert Config().notebook_prefix == ""
+
+
+def test_load_config_notebook_prefix(tmp_path: Path) -> None:
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text('[evernote]\nbackend = "email"\nnotebook_prefix = "convos_"\n')
+    assert load_config(cfg_path).notebook_prefix == "convos_"

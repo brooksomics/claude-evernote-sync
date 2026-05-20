@@ -43,9 +43,21 @@ uv sync
 
 In Evernote: **Account → Account Info → Email Notes to**. It looks like `username.xxx@m.evernote.com`. Treat it like a password — anyone who has it can email content into your account.
 
-### 2a. Create the destination notebook(s) in Evernote
+### 2a. Create the destination notebooks in Evernote
 
-Before your first sync, manually create the notebook you'll use (default: `claude_convos`) by clicking **New Notebook** in Evernote. If you configure `[notebook_overrides]` later for per-bucket routing, create those notebooks too.
+The default config (`config.toml.example`) ships with `notebook_prefix = "convos_"` — every session routes to a notebook named `convos_<bucket>` (e.g. `convos_myapp`, `convos_personal-blog`). One notebook per project keeps the sidebar tidy when you collect them in a stack.
+
+**Easiest setup:**
+
+1. In Evernote, create a stack named something like `claude_convos` (right-click any notebook → *Add to stack* → *New stack*).
+2. Run a dry-run to discover which buckets will be used:
+   ```bash
+   uv run claude-evernote-sync --dry-run -v
+   ```
+   The output lines (`[dry-run] would sync: <title> - <bucket> - <short_id>`) tell you the bucket name for each session.
+3. Create a notebook for each unique bucket inside the stack, named `convos_<bucket>`. Also create the catch-all `convos_default` notebook for any session whose bucket can't be derived.
+
+If you'd rather route everything to a single notebook, set `notebook_prefix = ""` and use `notebook_name` as your single target.
 
 This step matters because Evernote's email-to-note feature **silently falls back to your default notebook** if the `@notebook` reference doesn't exist or has a typo — notes won't be lost, but they'll land in the wrong place and you'll have to move them manually. The `api` backend creates notebooks automatically; the `email` backend cannot.
 
@@ -126,7 +138,8 @@ See [`config.toml.example`](./config.toml.example) for all options. Key fields:
 ```toml
 [evernote]
 backend = "email"               # "email" or "api"
-notebook_name = "claude_convos" # default destination notebook
+notebook_prefix = "convos_"     # every session routes to "<prefix><bucket>"
+notebook_name = "convos_default" # catch-all (used only when prefix is empty)
 developer_token = ""            # required for backend = "api"
 
 [scan]
@@ -137,15 +150,19 @@ days_back = 2
 rollup_overrides = ["/path/to/workspace"]  # absorb child repos
 
 [notebook_overrides]
-# "tile-ai" = "TileAI Notes"   # route specific buckets to their own notebooks
-# biotech_jobs = "Job Search"
+# "myapp" = "Special Notebook Name"   # explicit override; never re-prefixed
+# personal_blog = "Writing"
 ```
 
 ### Per-bucket notebook routing
 
-By default everything lands in `claude_convos`. Use `[notebook_overrides]` to route specific buckets to different notebooks — useful if some projects should live alongside other notes for that area of work.
+Two layered mechanisms decide which Evernote notebook a session lands in:
 
-Keys are bucket names (= git repo root's basename, or `rollup_overrides` path basename). Values are the target notebook name. Anything not listed falls back to `notebook_name`.
+1. **`notebook_overrides`** — explicit per-bucket mapping. Wins over everything else. The value is used verbatim (not re-prefixed).
+2. **`notebook_prefix`** — if set, any bucket *not* in `notebook_overrides` routes to `<prefix><bucket>`. This is the recommended default — one notebook per project, kept tidy under a stack.
+3. **`notebook_name`** — final fallback. Used only when `notebook_prefix` is empty.
+
+Keys in `notebook_overrides` are bucket names (= git repo root's basename, or `rollup_overrides` path basename).
 
 **Important:** with the `email` backend you must create each referenced notebook in Evernote manually before first sync. Email-to-note's `@notebook` syntax silently routes to your default notebook if the target doesn't exist. The `api` backend auto-creates notebooks.
 
@@ -233,7 +250,7 @@ Your conversations transit Gmail's servers en route to Evernote. If you'd rather
 
 **Email arrives but no note appears in Evernote** — Check that the sender address matches what Evernote has on file for your account. Email-to-note rejects from unknown senders.
 
-**Notes land in my default notebook instead of `claude_convos`** — The target notebook doesn't exist (or there's a typo). Create the notebook in Evernote manually, then move the stray notes into it. Future syncs will land correctly.
+**Notes land in my default Evernote notebook instead of the intended one** — The target notebook doesn't exist (or there's a typo). Re-check the bucket name with `--dry-run -v`, confirm a matching notebook exists in Evernote (e.g. `convos_myapp` for bucket `myapp` when `notebook_prefix = "convos_"`), then move the stray notes into it. Future syncs will land correctly.
 
 **Notes don't append, new ones get created instead** — The append `+` syntax requires an exact title match. Don't manually rename the auto-generated notes. Also: a note that's currently open in the Evernote app is locked against email updates; close it and retry.
 

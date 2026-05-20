@@ -133,6 +133,51 @@ def test_sync_all_resolves_notebook_per_bucket(tmp_path: Path) -> None:
     assert notebooks == {"RepoNotes", "default-nb"}
 
 
+def test_sync_all_applies_notebook_prefix_when_no_override(tmp_path: Path) -> None:
+    """With notebook_prefix set, a bucket not listed in notebook_overrides
+    routes to `<prefix><bucket>` instead of the catch-all notebook_name."""
+    repo = tmp_path / "myproj"
+    (repo / ".git").mkdir(parents=True)
+    s = _session("s1", cwd=str(repo))
+    dest = MagicMock()
+    dest.sync_session.return_value = set()
+    config = Config(
+        notebook_name="convos_default",
+        notebook_prefix="convos_",
+    )
+    SyncJob(destination=dest, state=SyncState(), config=config).sync_all([s])
+    ctx_arg = dest.sync_session.call_args.args[0]
+    assert ctx_arg.notebook_name == "convos_myproj"
+
+
+def test_sync_all_override_wins_over_prefix(tmp_path: Path) -> None:
+    """An explicit notebook_overrides entry is never re-prefixed; the value
+    in the override is used verbatim."""
+    repo = tmp_path / "special"
+    (repo / ".git").mkdir(parents=True)
+    s = _session("s1", cwd=str(repo))
+    dest = MagicMock()
+    dest.sync_session.return_value = set()
+    config = Config(
+        notebook_prefix="convos_",
+        notebook_overrides={"special": "InboxX"},
+    )
+    SyncJob(destination=dest, state=SyncState(), config=config).sync_all([s])
+    assert dest.sync_session.call_args.args[0].notebook_name == "InboxX"
+
+
+def test_sync_all_empty_prefix_preserves_legacy_behavior(tmp_path: Path) -> None:
+    """Backward-compat: empty notebook_prefix → fall back to notebook_name."""
+    repo = tmp_path / "unconfigured"
+    (repo / ".git").mkdir(parents=True)
+    s = _session("s1", cwd=str(repo))
+    dest = MagicMock()
+    dest.sync_session.return_value = set()
+    config = Config(notebook_name="default-nb", notebook_prefix="")
+    SyncJob(destination=dest, state=SyncState(), config=config).sync_all([s])
+    assert dest.sync_session.call_args.args[0].notebook_name == "default-nb"
+
+
 def test_make_destination_email_backend() -> None:
     config = Config(backend="email")
     with patch("claude_evernote_sync.main.load_credentials") as mock_load:

@@ -82,7 +82,10 @@ class SyncJob:
         bucket = bucket_for_cwd(session.cwd, self.config.rollup_overrides)
         record = self.state.record_for(session.session_id)
         title = record.title if record else note_title_for_session(session, bucket)
-        notebook = self.config.notebook_overrides.get(bucket, self.config.notebook_name)
+        prefix = self.config.notebook_prefix
+        notebook = self.config.notebook_overrides.get(bucket) or (
+            f"{prefix}{bucket}" if prefix else self.config.notebook_name
+        )
         return SyncContext(
             session=session,
             bucket=bucket,
