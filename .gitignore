@@ -30,3 +30,8 @@ sync_state.json
 sync.log
 launchd.out.log
 launchd.err.log
+
+# Beads / Dolt local state (see .beads/.gitignore for in-tree rules)
+.dolt/
+*.db
+.beads-credential-key
