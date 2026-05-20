@@ -102,15 +102,21 @@ class Renderer:
     def _render_session_header(self, session: Session) -> str:
         start = session.start_ts.astimezone(self.timezone).strftime("%H:%M")
         end_label = self._fmt_time(session.end_ts, "%H:%M")
+        short_id = xml_escape(session.session_id[:8])
+        if session.summary:
+            title = xml_escape(session.summary)
+            sub_bits = [short_id, f"{start}-{end_label}"]
+        else:
+            title = f"Session {short_id}"
+            sub_bits = [f"{start}-{end_label}"]
         meta = [
             f"path: {xml_escape(session.cwd)}",
             f"branch: {xml_escape(session.git_branch or '-')}",
             f"version: {xml_escape(session.version or '-')}",
             f"messages: {session.message_count}",
         ]
-        header = f"<b>Session {xml_escape(session.session_id[:8])}</b>"
-        time_range = f"<i>{start}-{end_label}</i>"
-        return f"<hr/><p>{header} · {time_range}</p><p><i>{' · '.join(meta)}</i></p>"
+        head = f"<b>{title}</b> · <i>{' · '.join(sub_bits)}</i>"
+        return f"<hr/><p>{head}</p><p><i>{' · '.join(meta)}</i></p>"
 
     def _render_body(self, date_iso: str, bucket: str, sessions: list[Session]) -> str:
         title = note_title(bucket, date_iso)

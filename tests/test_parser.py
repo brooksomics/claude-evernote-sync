@@ -260,3 +260,7 @@ def test_parser_strips_ansi_from_message_text(tmp_path: Path) -> None:
     result = parse_jsonl_file(p)
     assert result is not None
     assert result.messages[0].text == "Set to foo mode."
+
+
+def test_session_summary_defaults_to_none(sample_session: Session) -> None:
+    assert sample_session.summary is None

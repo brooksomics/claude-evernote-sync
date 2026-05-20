@@ -291,3 +291,32 @@ def test_render_still_escapes_html_tags(renderer: Renderer) -> None:
     html = renderer.render_email_html("2026-05-15", "x", [s])
     assert "<script>" not in html
     assert "&lt;script&gt;" in html
+
+
+def test_session_header_uses_summary_as_title(renderer: Renderer) -> None:
+    """When Session.summary is set, the session header leads with the summary
+    text and demotes the short session id to the meta line for disambiguation."""
+    s = _session("abc12345", "/x", [_msg("user", "hi", 10)])
+    s.summary = "Refactor user auth flow"
+    html = renderer.render_email_html("2026-05-15", "x", [s])
+    assert "Refactor user auth flow" in html
+    assert "abc12345" in html
+
+
+def test_session_header_falls_back_when_no_summary(
+    renderer: Renderer, simple_session: Session
+) -> None:
+    """No summary → legacy 'Session <short_id>' header format."""
+    assert simple_session.summary is None
+    html = renderer.render_email_html("2026-05-15", "myrepo", [simple_session])
+    assert "Session session-" in html
+
+
+def test_session_header_xml_escapes_summary(renderer: Renderer) -> None:
+    """A summary containing reserved XML chars must be escaped, not embedded raw."""
+    s = _session("s12345", "/x", [_msg("user", "hi", 10)])
+    s.summary = "<script> & more"
+    html = renderer.render_email_html("2026-05-15", "x", [s])
+    assert "<script>" not in html
+    assert "&lt;script&gt;" in html
+    assert "&amp;" in html
