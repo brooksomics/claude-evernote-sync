@@ -14,14 +14,22 @@
 #             you have an existing token, or once Evernote reopens access.
 backend = "email"
 
-# Default notebook in Evernote where rollup notes land. Override per-bucket
-# below if you want certain projects in their own notebooks.
+# Recommended setup: organize per-project notebooks inside a single Evernote
+# stack so the sidebar stays tidy. With notebook_prefix set, every session
+# routes to "<prefix><bucket>" automatically — no per-project config needed.
+# Example: a session in /Users/you/Documents/git/myapp routes to "convos_myapp".
 #
-# IMPORTANT for "email" backend: you must create this notebook in Evernote
-# MANUALLY before first sync. Email-to-note silently falls back to your default
-# notebook if the @notebook reference doesn't match an existing one.
-# The "api" backend auto-creates notebooks.
-notebook_name = "claude_convos"
+# Set notebook_prefix = "" to disable; everything falls back to notebook_name.
+notebook_prefix = "convos_"
+
+# Catch-all notebook. Used only when notebook_prefix is empty, or for sessions
+# whose bucket can't be derived (rare edge case).
+notebook_name = "convos_default"
+
+# IMPORTANT for "email" backend: you must create each target notebook in
+# Evernote MANUALLY before first sync. Email-to-note silently falls back to
+# your default notebook if the @notebook reference doesn't match an existing
+# one. The "api" backend auto-creates notebooks.
 
 # Required only when backend = "api"
 developer_token = ""
@@ -59,10 +67,14 @@ rollup_overrides = [
     # "/Users/yourname/Documents/git/some-workspace",
 ]
 
-# Map a bucket name to a specific Evernote notebook. Buckets not listed here
-# fall back to evernote.notebook_name. Keys are the bucket name (= git repo
-# root basename, or basename of a rollup_overrides path). Quote any key
-# containing characters other than [A-Za-z0-9_-].
+# Map a bucket to a specific Evernote notebook name. Buckets not listed here
+# follow the notebook_prefix pattern above (e.g. "convos_<bucket>"), or fall
+# back to notebook_name if no prefix is set. An explicit override is never
+# re-prefixed — the value here is used verbatim.
+#
+# Keys are bucket names (= git repo root basename, or basename of a
+# rollup_overrides path). Quote any key containing characters outside
+# [A-Za-z0-9_-].
 [notebook_overrides]
-# "tile-ai" = "TileAI Notes"
-# biotech_jobs = "Job Search"
+# "myapp" = "Special Notebook Name"
+# personal_blog = "Writing"

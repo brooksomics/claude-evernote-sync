@@ -15,6 +15,7 @@ VALID_BACKENDS = {"email", "api"}
 class Config:
     backend: str = "email"
     notebook_name: str = "claude_convos"
+    notebook_prefix: str = ""
     notebook_overrides: dict[str, str] = field(default_factory=dict)
     developer_token: str = ""
     api_host: str = "www.evernote.com"
@@ -49,6 +50,7 @@ def _from_raw(raw: dict[str, object]) -> Config:
     return Config(
         backend=str(ev.get("backend", "email")),
         notebook_name=str(ev.get("notebook_name", "claude_convos")),
+        notebook_prefix=str(ev.get("notebook_prefix", "")),
         notebook_overrides=notebook_overrides,
         developer_token=str(ev.get("developer_token", "")),
         api_host=str(ev.get("api_host", "www.evernote.com")),
