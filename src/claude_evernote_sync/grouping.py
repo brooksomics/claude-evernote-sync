@@ -1,13 +1,8 @@
-"""Bucket sessions by parent directory and group by date."""
+"""Determine the rollup bucket for a session based on its working directory."""
 
 from __future__ import annotations
 
-from collections import defaultdict
 from pathlib import Path
-
-from claude_evernote_sync.parser import Session
-
-GroupKey = tuple[str, str]  # (date_iso, bucket_name)
 
 
 def find_git_root(start: Path) -> Path | None:
@@ -45,15 +40,3 @@ def bucket_for_cwd(cwd: str, overrides: list[str]) -> str:
     if git_root:
         return git_root.name
     return cwd_path.name or cwd_path.parent.name
-
-
-def group_sessions(sessions: list[Session], overrides: list[str]) -> dict[GroupKey, list[Session]]:
-    """Group sessions by (start-date, bucket-name); sort each bucket by start_ts."""
-    groups: dict[GroupKey, list[Session]] = defaultdict(list)
-    for session in sessions:
-        date_str = session.start_ts.date().isoformat()
-        bucket = bucket_for_cwd(session.cwd, overrides)
-        groups[(date_str, bucket)].append(session)
-    for sessions_in_group in groups.values():
-        sessions_in_group.sort(key=lambda s: s.start_ts)
-    return dict(groups)

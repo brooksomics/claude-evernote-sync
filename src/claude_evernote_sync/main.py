@@ -15,8 +15,8 @@ from claude_evernote_sync.destinations import Destination, SyncContext
 from claude_evernote_sync.destinations.api import ApiDestination
 from claude_evernote_sync.destinations.email import EmailDestination
 from claude_evernote_sync.evernote_client import EvernoteSync
-from claude_evernote_sync.formatter import Renderer, note_title, resolve_timezone
-from claude_evernote_sync.grouping import GroupKey, group_sessions
+from claude_evernote_sync.formatter import Renderer, note_title_for_session, resolve_timezone
+from claude_evernote_sync.grouping import bucket_for_cwd
 from claude_evernote_sync.parser import Session, parse_jsonl_file
 from claude_evernote_sync.state import SyncState, load_state, save_state
 from claude_evernote_sync.summary import attach_cross_file_summaries, extract_summary_records
@@ -58,24 +58,27 @@ class SyncJob:
     state: SyncState
     config: Config
 
-    def sync_all(self, groups: dict[GroupKey, list[Session]]) -> int:
+    def sync_all(self, sessions: list[Session]) -> int:
         count = 0
-        for key, sessions in sorted(groups.items()):
-            ctx = self._make_context(key, sessions)
-            synced = self.destination.sync_group(ctx)
+        for session in sorted(sessions, key=lambda s: s.start_ts):
+            ctx = self._make_context(session)
+            synced = self.destination.sync_session(ctx)
             if synced:
-                self.state.mark_synced(key, synced)
+                self.state.mark_synced(session.session_id, synced, title=ctx.title)
                 count += 1
-                logger.info("synced: %s (%d new msgs)", note_title(key[1], key[0]), len(synced))
+                logger.info("synced: %s (%d new msgs)", ctx.title, len(synced))
         return count
 
-    def _make_context(self, key: GroupKey, sessions: list[Session]) -> SyncContext:
-        notebook = self.config.notebook_overrides.get(key[1], self.config.notebook_name)
+    def _make_context(self, session: Session) -> SyncContext:
+        bucket = bucket_for_cwd(session.cwd, self.config.rollup_overrides)
+        record = self.state.record_for(session.session_id)
+        title = record.title if record else note_title_for_session(session, bucket)
+        notebook = self.config.notebook_overrides.get(bucket, self.config.notebook_name)
         return SyncContext(
-            date_iso=key[0],
-            bucket=key[1],
-            sessions=sessions,
-            synced_uuids=self.state.synced_for(key),
+            session=session,
+            bucket=bucket,
+            title=title,
+            synced_uuids=record.synced_uuids if record else set(),
             notebook_name=notebook,
         )
 
@@ -87,22 +90,22 @@ def run(config: Config, dry_run: bool = False) -> int:
     if config.limit is not None:
         sessions = sorted(sessions, key=lambda s: s.end_ts, reverse=True)[: max(0, config.limit)]
         logger.info("limit=%d applied — %d sessions selected", config.limit, len(sessions))
-    groups = group_sessions(sessions, config.rollup_overrides)
-    logger.info("parsed %d sessions into %d groups", len(sessions), len(groups))
+    logger.info("parsed %d sessions", len(sessions))
     if dry_run:
-        _log_dry_run(groups)
+        _log_dry_run(sessions, config)
         return 0
     state = load_state(DEFAULT_STATE_PATH)
     job = SyncJob(destination=make_destination(config), state=state, config=config)
-    count = job.sync_all(groups)
+    count = job.sync_all(sessions)
     save_state(state, DEFAULT_STATE_PATH)
     return count
 
 
-def _log_dry_run(groups: dict[GroupKey, list[Session]]) -> None:
-    for (date_iso, bucket), sessions in sorted(groups.items()):
-        title = note_title(bucket, date_iso)
-        logger.info("[dry-run] would sync: %s (%d sessions)", title, len(sessions))
+def _log_dry_run(sessions: list[Session], config: Config) -> None:
+    for session in sorted(sessions, key=lambda s: s.start_ts):
+        bucket = bucket_for_cwd(session.cwd, config.rollup_overrides)
+        title = note_title_for_session(session, bucket)
+        logger.info("[dry-run] would sync: %s (%d msgs)", title, session.message_count)
 
 
 def _setup_logging(verbose: bool) -> None:

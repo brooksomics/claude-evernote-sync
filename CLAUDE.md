@@ -7,7 +7,7 @@ Project instructions for Claude Code working in this repo. Keep it short and poi
 A Python CLI + hourly launchd job that mirrors Claude Code session JSONL files (`~/.claude/projects/`) into Evernote as daily rollup notes per git repo.
 
 Two backends behind a pluggable `Destination` Protocol:
-- **`email`** (default, works today): SMTP via Gmail to Evernote's email-to-note address. Append-only — uses per-group synced-UUID state to avoid resending.
+- **`email`** (default, works today): SMTP via Gmail to Evernote's email-to-note address. Append-only — uses per-session synced-UUID state to avoid resending; each session is a separate Evernote note with a title locked at first sync.
 - **`api`** (currently blocked): Evernote NoteStore REST. Code is ready but Evernote suspended new developer-token issuance in Jan 2026. Don't delete this code; it's the fast path once they reopen access.
 
 A future `mcp` destination is anticipated (Evernote announced an MCP integration without a timeline).
@@ -58,21 +58,23 @@ Other rules:
 ## Architecture cheat sheet
 
 ```
-parser.py       JSONL → Session (dataclass) with messages + metadata
-grouping.py     Session list → {(date, bucket): [Session, ...]}
-formatter.py    Render to ENML (api) or HTML email body (email)
-state.py        Persistent {(date, bucket): {synced_uuid, ...}}
+parser.py       JSONL → Session (dataclass) with messages + metadata + optional summary
+summary.py      Extract type=summary JSONL records; cross-file match by leafUuid
+grouping.py     bucket_for_cwd — derive the rollup bucket name from a session's cwd
+formatter.py    Render one session to ENML (api) or HTML email body (email);
+                note_title_for_session locks a title from summary / first prompt
+state.py        Persistent {session_id: SessionRecord{synced_uuids, title}}
 credentials.py  Load Gmail/Evernote credentials from chmod-600 JSON
 email_client.py SMTP_SSL send with Evernote subject syntax
 evernote_client.py  Thrift NoteStore wrapper (token + host)
 destinations/
-  __init__.py   SyncContext dataclass + Destination Protocol
-  email.py      EmailDestination — uses state, append-only
+  __init__.py   SyncContext (per-session) + Destination Protocol
+  email.py      EmailDestination — uses state, append-only, per-session subject
   api.py        ApiDestination  — idempotent upsert, lazy notebook cache
 main.py         CLI + orchestration. SyncJob bundles dest+state+config.
 ```
 
-When adding a new destination, implement the `Destination` protocol (one method: `sync_group(ctx: SyncContext) -> set[str]`) and add a branch in `main.make_destination`. Don't try to make all destinations look the same beyond that interface — email is fundamentally append-only, the api is idempotent upsert, and a future MCP backend will have its own constraints.
+When adding a new destination, implement the `Destination` protocol (one method: `sync_session(ctx: SyncContext) -> set[str]`) and add a branch in `main.make_destination`. Don't try to make all destinations look the same beyond that interface — email is fundamentally append-only with a locked subject, the api is idempotent upsert keyed on title, and a future MCP backend will have its own constraints.
 
 ## Commit style
 
