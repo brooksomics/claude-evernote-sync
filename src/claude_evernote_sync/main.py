@@ -19,6 +19,7 @@ from claude_evernote_sync.formatter import Renderer, note_title, resolve_timezon
 from claude_evernote_sync.grouping import GroupKey, group_sessions
 from claude_evernote_sync.parser import Session, parse_jsonl_file
 from claude_evernote_sync.state import SyncState, load_state, save_state
+from claude_evernote_sync.summary import attach_cross_file_summaries, extract_summary_records
 
 LOG_PATH = Path("~/.claude-evernote-sync/sync.log").expanduser()
 logger = logging.getLogger("claude_evernote_sync")
@@ -34,7 +35,10 @@ def discover_jsonl_files(projects_dir: Path, days_back: int) -> list[Path]:
 
 def parse_all(paths: list[Path]) -> list[Session]:
     sessions = [parse_jsonl_file(p) for p in paths]
-    return [s for s in sessions if s is not None]
+    resolved = [s for s in sessions if s is not None]
+    summaries = [r for p in paths for r in extract_summary_records(p)]
+    attach_cross_file_summaries(resolved, summaries)
+    return resolved
 
 
 def make_destination(config: Config) -> Destination:

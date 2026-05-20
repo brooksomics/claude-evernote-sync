@@ -39,9 +39,7 @@ def extract_summary_records(path: Path) -> list[SummaryRecord]:
     return out
 
 
-def attach_cross_file_summaries(
-    sessions: list[Session], summaries: list[SummaryRecord]
-) -> None:
+def attach_cross_file_summaries(sessions: list[Session], summaries: list[SummaryRecord]) -> None:
     """Match summaries to sessions via leafUuid → message_uuid → session.
 
     Mutates `Session.summary` in place. First match wins; subsequent
