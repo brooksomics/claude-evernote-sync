@@ -40,6 +40,7 @@ class Session:
     start_ts: datetime
     end_ts: datetime
     messages: list[Message]
+    summary: str | None = None
 
     @property
     def message_count(self) -> int:
