@@ -1,2 +1,4 @@
 {"id":"int-49132ab4","kind":"field_change","created_at":"2026-05-20T00:44:32.852533Z","actor":"Bubba Brooks","issue_id":"claude-evernote-sync-bfa","extra":{"field":"status","new_value":"in_progress","old_value":"open"}}
 {"id":"int-96f0844e","kind":"field_change","created_at":"2026-05-20T01:07:04.953235Z","actor":"Bubba Brooks","issue_id":"claude-evernote-sync-cer","extra":{"field":"status","new_value":"in_progress","old_value":"open"}}
+{"id":"int-fe8048f3","kind":"field_change","created_at":"2026-05-20T03:20:43.505234Z","actor":"Bubba Brooks","issue_id":"claude-evernote-sync-bfa","extra":{"field":"status","new_value":"closed","old_value":"in_progress"}}
+{"id":"int-060bf083","kind":"field_change","created_at":"2026-05-20T03:20:44.931965Z","actor":"Bubba Brooks","issue_id":"claude-evernote-sync-cer","extra":{"field":"status","new_value":"closed","old_value":"in_progress"}}
