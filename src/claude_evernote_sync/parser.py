@@ -12,6 +12,15 @@ from typing import Any
 
 CONVERSATION_TYPES = {"user", "assistant"}
 CODE_FENCE_RE = re.compile(r"```[\s\S]*?```", re.MULTILINE)
+ANSI_CSI_RE = re.compile(r"\x1b\[[\d;]*[a-zA-Z]")
+ANSI_SGR_BARE_RE = re.compile(r"\[\d+(?:;\d+)*m")
+SLASH_COMMAND_PREFIXES = (
+    "<local-command-caveat",
+    "<local-command-stdout",
+    "<command-name",
+    "<command-message",
+    "<command-args",
+)
 
 
 @dataclass(frozen=True)
@@ -46,6 +55,25 @@ def strip_code_fences(text: str) -> str:
     return CODE_FENCE_RE.sub("", text)
 
 
+def strip_ansi(text: str) -> str:
+    """Remove ANSI CSI sequences and bare SGR brackets like `[1m...[22m`.
+
+    Bare SGR appears when something upstream stripped the ESC byte but
+    left the bracket sequence behind, which is what the user's archived
+    notes showed in Evernote.
+    """
+    text = ANSI_CSI_RE.sub("", text)
+    return ANSI_SGR_BARE_RE.sub("", text)
+
+
+def is_slash_command_lifecycle(text: str) -> bool:
+    """True if the text is a slash-command lifecycle wrapper that Claude Code
+    emits as a 'user' record when a slash command runs. Filtering these keeps
+    the archive focused on conversational content, not meta-actions."""
+    stripped = text.lstrip()
+    return any(stripped.startswith(p) for p in SLASH_COMMAND_PREFIXES)
+
+
 def _parse_timestamp(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
@@ -68,8 +96,9 @@ def _extract_message(record: dict[str, Any]) -> Message | None:
     msg = record.get("message") or {}
     text = _extract_text_from_content(msg.get("content"))
     text = strip_code_fences(text).strip()
-    if not text:
+    if not text or is_slash_command_lifecycle(text):
         return None
+    text = strip_ansi(text)
     ts = _parse_timestamp(record["timestamp"])
     uuid = str(record.get("uuid") or f"{record.get('sessionId', '?')}:{ts.isoformat()}")
     return Message(uuid=uuid, role=record["type"], text=text, ts=ts)

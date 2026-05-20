@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, tzinfo
 from zoneinfo import ZoneInfo
 
+import markdown
+
 from claude_evernote_sync.parser import Message, Session
 
 ENML_PROLOGUE = (
@@ -94,7 +96,7 @@ class Renderer:
         role_label = "User" if msg.role == "user" else "Assistant"
         ts = self._fmt_time(msg.ts, "%H:%M:%S")
         header = f"<p><b>{role_label}</b> <i>({ts})</i></p>"
-        body = "<p>" + "<br/>".join(xml_escape(msg.text).split("\n")) + "</p>"
+        body = markdown.markdown(xml_escape(msg.text), output_format="xhtml", extensions=["nl2br"])
         return header + body
 
     def _render_session_header(self, session: Session) -> str:

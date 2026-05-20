@@ -237,3 +237,57 @@ def test_utc_renderer_unchanged_format() -> None:
     s = _session("s", "/x", [_msg("user", "hi", 14)])
     html = renderer.render_email_html("2026-05-15", "x", [s])
     assert "14:00:00 UTC" in html
+
+
+def test_render_converts_bold_markdown(renderer: Renderer) -> None:
+    s = _session("s", "/x", [_msg("user", "This is **bold** text.", 10)])
+    html = renderer.render_email_html("2026-05-15", "x", [s])
+    assert "<strong>bold</strong>" in html
+    assert "**bold**" not in html
+
+
+def test_render_converts_italic_markdown(renderer: Renderer) -> None:
+    s = _session("s", "/x", [_msg("user", "An *italic* phrase.", 10)])
+    html = renderer.render_email_html("2026-05-15", "x", [s])
+    assert "<em>italic</em>" in html
+
+
+def test_render_converts_inline_code_markdown(renderer: Renderer) -> None:
+    s = _session("s", "/x", [_msg("user", "Use `foo()` to call.", 10)])
+    html = renderer.render_email_html("2026-05-15", "x", [s])
+    assert "<code>foo()</code>" in html
+
+
+def test_render_converts_heading_markdown(renderer: Renderer) -> None:
+    s = _session("s", "/x", [_msg("user", "## My Heading\n\nsome text", 10)])
+    html = renderer.render_email_html("2026-05-15", "x", [s])
+    assert "<h2>My Heading</h2>" in html
+
+
+def test_render_converts_link_markdown(renderer: Renderer) -> None:
+    s = _session("s", "/x", [_msg("user", "See [the docs](https://example.com).", 10)])
+    html = renderer.render_email_html("2026-05-15", "x", [s])
+    assert '<a href="https://example.com">the docs</a>' in html
+
+
+def test_render_converts_bullet_list_markdown(renderer: Renderer) -> None:
+    s = _session("s", "/x", [_msg("user", "Items:\n\n- one\n- two\n- three", 10)])
+    html = renderer.render_email_html("2026-05-15", "x", [s])
+    assert "<ul>" in html
+    assert "<li>one</li>" in html
+
+
+def test_render_preserves_single_newlines_as_br(renderer: Renderer) -> None:
+    """A single \\n between lines should render as <br/>, not collapse to a space."""
+    s = _session("s", "/x", [_msg("assistant", "line one\nline two", 10)])
+    html = renderer.render_email_html("2026-05-15", "x", [s])
+    assert "<br" in html
+    assert "line one" in html and "line two" in html
+
+
+def test_render_still_escapes_html_tags(renderer: Renderer) -> None:
+    """Raw HTML in user text must remain entity-escaped to avoid injection."""
+    s = _session("s", "/x", [_msg("user", "Look: <script>alert(1)</script>", 10)])
+    html = renderer.render_email_html("2026-05-15", "x", [s])
+    assert "<script>" not in html
+    assert "&lt;script&gt;" in html
