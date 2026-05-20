@@ -152,7 +152,7 @@ Keys are bucket names (= git repo root's basename, or `rollup_overrides` path ba
 ## CLI reference
 
 ```
-claude-evernote-sync [--config PATH] [--dry-run] [--days N] [--limit N] [--backfill] [-v]
+claude-evernote-sync [--config PATH] [--dry-run] [--days N] [--limit N] [--force] [--backfill] [-v]
 ```
 
 | Flag | Default | Effect |
@@ -161,6 +161,7 @@ claude-evernote-sync [--config PATH] [--dry-run] [--days N] [--limit N] [--backf
 | `--dry-run` | off | Print what would be synced; no Evernote calls |
 | `--days N` | from config | Override `days_back` for this run |
 | `--limit N` | unlimited | Keep at most N most-recently-active sessions (useful for verifying rendering with a small sample) |
+| `--force` | off | Re-send all messages for matched sessions; clears their per-session state first. Existing Evernote notes are not modified — a force run creates a fresh per-session note, so delete the prior note in Evernote first if you don't want a duplicate. |
 | `--backfill` | off | Sync everything (sets `days_back=3650`) |
 | `-v` | off | Verbose logging |
 

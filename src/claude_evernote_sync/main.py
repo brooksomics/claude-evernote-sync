@@ -68,6 +68,8 @@ class SyncJob:
     def sync_all(self, sessions: list[Session]) -> int:
         count = 0
         for session in sorted(sessions, key=lambda s: s.start_ts):
+            if self.config.force:
+                self.state.sessions.pop(session.session_id, None)
             ctx = self._make_context(session)
             synced = self.destination.sync_session(ctx)
             if synced:
@@ -129,6 +131,11 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--dry-run", action="store_true", help="Show what would be synced")
     p.add_argument("--days", type=int, help="Override config days_back")
     p.add_argument("--limit", type=int, help="Sync at most N most-recently-active sessions")
+    p.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-send all messages for matched sessions; clears their state first",
+    )
     p.add_argument("--backfill", action="store_true", help="Sync all history")
     p.add_argument("-v", "--verbose", action="store_true")
     return p.parse_args(argv)
@@ -148,5 +155,7 @@ def cli(argv: list[str] | None = None) -> int:
         config.days_back = args.days
     if args.limit is not None:
         config.limit = args.limit
+    if args.force:
+        config.force = True
     run(config, dry_run=args.dry_run)
     return 0
