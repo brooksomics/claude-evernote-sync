@@ -93,6 +93,46 @@ def attach_ai_titles(sessions: list[Session], ai_titles: list[AiTitleRecord]) ->
             target.summary = record.title
 
 
+def is_subagent_path(path: Path) -> bool:
+    """True if a JSONL file is a Claude Code sub-agent transcript (under subagents/)."""
+    return "subagents" in path.parts
+
+
+def read_subagent_description(path: Path) -> str | None:
+    """Read a sub-agent's sibling `.meta.json` description (its task topic).
+
+    Claude Code writes `<stem>.meta.json` ({agentType, description, toolUseId})
+    next to each `subagents/agent-*.jsonl`. Returns None for non-sub-agent files
+    or a missing/invalid sidecar.
+    """
+    if not is_subagent_path(path):
+        return None
+    meta = path.with_suffix(".meta.json")
+    if not meta.exists():
+        return None
+    try:
+        data = json.loads(meta.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+    desc = data.get("description") if isinstance(data, dict) else None
+    return desc.strip() if isinstance(desc, str) and desc.strip() else None
+
+
+def attach_subagent_descriptions(sessions: list[Session], paths: list[Path]) -> None:
+    """Set each sub-agent session's summary to its `.meta.json` description.
+
+    Sub-agent transcripts carry the parent's sessionId, so ai-title never
+    matches them and the title would fall back to the verbose task prompt.
+    The meta description is the right topic, so this runs last and wins.
+    """
+    by_stem = {p.stem: p for p in paths}
+    for session in sessions:
+        path = by_stem.get(session.session_id)
+        desc = read_subagent_description(path) if path else None
+        if desc:
+            session.summary = desc
+
+
 def _iter_records(path: Path) -> list[dict[str, object]]:
     records: list[dict[str, object]] = []
     with path.open("r", encoding="utf-8") as f:
