@@ -33,19 +33,19 @@ uv run claude-evernote-sync --dry-run -v   # exercise without sending email
 
 After cloning, always `pre-commit install` so the git hook is active.
 
-## Code conventions (enforced — not aspirational)
+## Code conventions
 
-These limits are checked in CI; bumping a limit usually means the file or function should be split:
+CI enforces branch coverage (≥ 80%), line length (100), `mypy --strict`, ruff lint + format, and gitleaks. The size/shape limits below are **conventions** — followed by hand and in review, not yet auto-enforced (tracked in the issue tracker). Bumping one usually means the file or function should be split:
 
-| Limit | Value |
-|---|---|
-| Lines per function | 20 |
-| Parameters per function | 3 |
-| Nesting depth | 2 |
-| Lines per file | 200 |
-| Functions per file | 10 |
-| Branch coverage | ≥ 80% |
-| Line length | 100 |
+| Limit | Value | Enforced? |
+|---|---|---|
+| Lines per function | 20 | convention |
+| Parameters per function | 3 | convention |
+| Nesting depth | 2 | convention |
+| Lines per file | 200 | convention |
+| Functions per file | 10 | convention |
+| Branch coverage | ≥ 80% | CI |
+| Line length | 100 | CI (ruff) |
 
 Other rules:
 - **TDD: RED → GREEN → VALIDATE.** Write a failing test first; make it pass with minimum code; then run the full check suite. Bug fixes start with a failing test that reproduces the bug.

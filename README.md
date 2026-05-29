@@ -119,17 +119,56 @@ rm ~/Library/LaunchAgents/com.claudeevernote.sync.plist  # uninstall
 
 For each Claude Code session JSONL:
 
-- **Included**: user prompts, assistant text responses, session metadata (project path, git branch, version, message count)
-- **Excluded**: tool calls (Bash, Read, Edit, etc.), tool results, thinking blocks, fenced code blocks
+- **Included**: user prompts, assistant responses (including any code they write), and — at `content_depth = "full"` (the default) — a compact list of the tool calls the assistant made (Bash, Read, Edit, Task, …). Plus session metadata (project path, git branch, version, message count).
+- **Excluded**: tool *output* (command stdout, file contents) and thinking blocks. Set `content_depth = "conversation"` to drop the tool-call lines too.
 
 Each session becomes one note. The note title has the form `<topic> - <bucket> - <short_id>`, where:
 
-- **topic** is the session's embedded summary (Claude Code writes these into the JSONL automatically), falling back to the first user prompt if no summary exists yet, then to the literal "Claude Session"
+- **topic** is the session's embedded summary/title (Claude Code writes these into the JSONL automatically), falling back to the first user prompt if no summary exists yet, then to the literal "Claude Session". Sub-agent transcripts (under `subagents/`) are titled from their task description instead — see [`subagent_notes`](#render-options-render)
 - **bucket** is:
   1. The configured override path's basename if `cwd` is under one (see `rollup_overrides`)
   2. Else, the git repo root's basename
   3. Else, the immediate directory's basename
 - **short_id** is the first 8 characters of the session UUID, so identical topics in the same bucket still produce distinct notes
+
+## What a note looks like
+
+Notes are rendered for skimmability, not as a raw dump: a small gray metadata line, then the conversation with **You** / **Claude** role labels (colored), minute-precision timestamps, code blocks, and — at `content_depth = "full"` — a compact, foldable list of the tool calls each turn made. The Evernote apps layer on more automatically: code blocks become **syntax-highlighted code widgets** with a copy button, and the assistant's markdown headings populate the note's **table of contents** and collapsible sections.
+
+A synthetic example (`tests/fixtures/demo_session.jsonl`, rendered and asserted by `tests/test_showcase.py`):
+
+```text
+Add an ASCII Mandelbrot renderer - asciiart - demo_ses        (note title)
+path: .../asciiart · branch: main · version: 2.1.156 · messages: 5 · 14:02-14:05
+
+You · 14:02
+Add a tiny ASCII Mandelbrot renderer to art.py, under 20 lines, width configurable.
+
+Claude · 14:02
+On it - let me check the current module first.
+  tools
+    • Read · art.py
+
+Claude · 14:03
+The renderer                                  (## heading -> note TOC + foldable)
+Here's a compact escape-time renderer, one complex iteration per cell:
+    def mandelbrot(width=80, height=24):       (code -> highlighted code-widget)
+        for y in range(height):
+            ...
+  tools
+    • Write · art.py
+
+Claude · 14:03
+Let me render it once, then hand a sub-agent the test.
+  tools
+    • Bash · Render a 60-wide Mandelbrot to eyeball it
+    • Task · Write a pytest checking mandelbrot output dimensions
+
+Claude · 14:05
+Done - renders cleanly, sub-agent added a dimensions test. 20 lines exactly.
+```
+
+(Colors, code-widget highlighting, and heading folding/TOC are Evernote-app rendering; the stored note is plain inline-styled HTML.)
 
 ## Configuration reference
 
@@ -145,6 +184,10 @@ developer_token = ""            # required for backend = "api"
 [scan]
 projects_dir = "~/.claude/projects"
 days_back = 2
+
+[render]
+subagent_notes = "keep"   # "keep" = title sub-agent notes from .meta.json; "suppress" = skip them
+content_depth = "full"    # "full" = dialogue + compact tool-call lines; "conversation" = dialogue only
 
 [grouping]
 rollup_overrides = ["/path/to/workspace"]  # absorb child repos
@@ -165,6 +208,11 @@ Two layered mechanisms decide which Evernote notebook a session lands in:
 Keys in `notebook_overrides` are bucket names (= git repo root's basename, or `rollup_overrides` path basename).
 
 **Important:** with the `email` backend you must create each referenced notebook in Evernote manually before first sync. Email-to-note's `@notebook` syntax silently routes to your default notebook if the target doesn't exist. The `api` backend auto-creates notebooks.
+
+### Render options (`[render]`)
+
+- **`subagent_notes`** — Claude Code sub-agent (Task-tool) transcripts live under `<session>/subagents/`. `"keep"` (default) gives each its own note titled from its `.meta.json` task description (e.g. *"Audit pooling and perf hotspots"*); `"suppress"` skips them so only top-level sessions sync.
+- **`content_depth`** — `"full"` (default) includes a compact, foldable list of the assistant's tool calls; `"conversation"` renders just the dialogue. Code the assistant writes renders either way.
 
 ## CLI reference
 
@@ -273,16 +321,14 @@ pre-commit install               # installs the git hook
 uv run pytest                    # full suite, coverage report
 ```
 
-Quality gates enforced by CI:
-- 20 lines per function (max)
-- 3 params per function (max)
-- 2 nesting levels (max)
-- 200 lines per file (max)
-- 10 functions per file (max)
+**Enforced by CI** (a PR fails if any of these break):
 - 80% branch coverage (min)
-- Strict mypy + ruff lint + ruff format
+- Strict mypy, ruff lint, ruff format (incl. 100-char line length)
+- Secret scanning via `gitleaks` (every commit + CI build)
 
-Secret scanning via `gitleaks` runs on every commit and CI build.
+**Conventions** (followed by hand and in review; not yet auto-enforced — tracked in the issue tracker):
+- 20 lines per function, 3 params per function, 2 nesting levels
+- 200 lines per file, 10 functions per file
 
 ## Security
 
