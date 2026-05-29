@@ -135,40 +135,11 @@ Each session becomes one note. The note title has the form `<topic> - <bucket> -
 
 Notes are rendered for skimmability, not as a raw dump: a small gray metadata line, then the conversation with **You** / **Claude** role labels (colored), minute-precision timestamps, code blocks, and — at `content_depth = "full"` — a compact, foldable list of the tool calls each turn made. The Evernote apps layer on more automatically: code blocks become **syntax-highlighted code widgets** with a copy button, and the assistant's markdown headings populate the note's **table of contents** and collapsible sections.
 
-A synthetic example (`tests/fixtures/demo_session.jsonl`, rendered and asserted by `tests/test_showcase.py`):
+Here's that demo session rendered in the Evernote desktop app. The fixture (`tests/fixtures/demo_session.jsonl`) is pinned by `tests/test_showcase.py`, and you can reproduce the note yourself with `uv run python scripts/preview_render.py --demo`:
 
-```text
-Add an ASCII Mandelbrot renderer - asciiart - demo_ses        (note title)
-path: .../asciiart · branch: main · version: 2.1.156 · messages: 5 · 14:02-14:05
+![A Claude Code session rendered as an Evernote note: colored You/Claude role labels, a syntax-highlighted Python code widget with a copy button, and compact tool-call lists under each turn.](docs/demo-note.png)
 
-You · 14:02
-Add a tiny ASCII Mandelbrot renderer to art.py, under 20 lines, width configurable.
-
-Claude · 14:02
-On it - let me check the current module first.
-  tools
-    • Read · art.py
-
-Claude · 14:03
-The renderer                                  (## heading -> note TOC + foldable)
-Here's a compact escape-time renderer, one complex iteration per cell:
-    def mandelbrot(width=80, height=24):       (code -> highlighted code-widget)
-        for y in range(height):
-            ...
-  tools
-    • Write · art.py
-
-Claude · 14:03
-Let me render it once, then hand a sub-agent the test.
-  tools
-    • Bash · Render a 60-wide Mandelbrot to eyeball it
-    • Task · Write a pytest checking mandelbrot output dimensions
-
-Claude · 14:05
-Done - renders cleanly, sub-agent added a dimensions test. 20 lines exactly.
-```
-
-(Colors, code-widget highlighting, and heading folding/TOC are Evernote-app rendering; the stored note is plain inline-styled HTML.)
+Colors, the code-widget syntax highlighting, and heading-based folding/TOC are Evernote-app rendering; the stored note is plain inline-styled HTML.
 
 ## Configuration reference
 
