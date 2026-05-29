@@ -56,6 +56,16 @@ days_back = 2
 # them over a fixed offset string.
 timezone = "UTC"
 
+[render]
+# How to handle Claude Code sub-agent (Task-tool) transcripts. They live in
+# <session>/subagents/ and otherwise each become their own note titled with the
+# verbose task prompt the sub-agent was given.
+#
+#   "keep"     — one note per sub-agent, titled from its .meta.json description
+#                (e.g. "Audit pooling and perf hotspots"). Default.
+#   "suppress" — skip sub-agent transcripts; only top-level sessions sync.
+subagent_notes = "keep"
+
 [grouping]
 # By default, each session is rolled up under its git repo root's basename.
 # A session in a non-git directory uses that directory's name.

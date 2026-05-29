@@ -8,8 +8,11 @@ from claude_evernote_sync.summary import (
     SummaryRecord,
     attach_ai_titles,
     attach_cross_file_summaries,
+    attach_subagent_descriptions,
     extract_ai_title_records,
     extract_summary_records,
+    is_subagent_path,
+    read_subagent_description,
 )
 
 
@@ -227,3 +230,66 @@ def test_attach_ai_titles_overrides_existing_summary(tmp_path: Path) -> None:
 def test_attach_ai_titles_ignores_unknown_session() -> None:
     """An ai-title record for a session we don't have is silently dropped."""
     attach_ai_titles([], [AiTitleRecord(session_id="ghost", title="orphan")])
+
+
+def test_is_subagent_path() -> None:
+    assert is_subagent_path(Path("/x/SESSION/subagents/agent-a.jsonl"))
+    assert not is_subagent_path(Path("/x/SESSION/regular.jsonl"))
+
+
+def test_read_subagent_description(tmp_path: Path) -> None:
+    sub = tmp_path / "SESSION" / "subagents"
+    sub.mkdir(parents=True)
+    (sub / "agent-a.jsonl").write_text("{}")
+    (sub / "agent-a.meta.json").write_text(
+        '{"agentType":"general-purpose","description":"Audit pooling"}'
+    )
+    assert read_subagent_description(sub / "agent-a.jsonl") == "Audit pooling"
+
+
+def test_read_subagent_description_non_subagent(tmp_path: Path) -> None:
+    p = tmp_path / "regular.jsonl"
+    p.write_text("{}")
+    assert read_subagent_description(p) is None
+
+
+def test_read_subagent_description_missing_meta(tmp_path: Path) -> None:
+    sub = tmp_path / "subagents"
+    sub.mkdir()
+    (sub / "agent-b.jsonl").write_text("{}")
+    assert read_subagent_description(sub / "agent-b.jsonl") is None
+
+
+def test_read_subagent_description_invalid_meta_json(tmp_path: Path) -> None:
+    sub = tmp_path / "subagents"
+    sub.mkdir()
+    (sub / "agent-d.jsonl").write_text("{}")
+    (sub / "agent-d.meta.json").write_text("not valid json {")
+    assert read_subagent_description(sub / "agent-d.jsonl") is None
+
+
+def test_attach_subagent_descriptions_sets_summary(tmp_path: Path) -> None:
+    sub = tmp_path / "subagents"
+    sub.mkdir()
+    p = sub / "agent-c.jsonl"
+    p.write_text(
+        '{"type":"user","uuid":"u1","timestamp":"2026-05-15T10:00:00.000Z",'
+        '"cwd":"/x","sessionId":"agent-c","message":{"role":"user","content":"do audit"}}'
+    )
+    (sub / "agent-c.meta.json").write_text('{"description":"Audit caches"}')
+    session = parse_jsonl_file(p)
+    assert session is not None
+    attach_subagent_descriptions([session], [p])
+    assert session.summary == "Audit caches"
+
+
+def test_attach_subagent_descriptions_leaves_non_subagent_untouched(tmp_path: Path) -> None:
+    p = tmp_path / "regular.jsonl"
+    p.write_text(
+        '{"type":"user","uuid":"u1","timestamp":"2026-05-15T10:00:00.000Z",'
+        '"cwd":"/x","sessionId":"regular","message":{"role":"user","content":"hi"}}'
+    )
+    session = parse_jsonl_file(p)
+    assert session is not None
+    attach_subagent_descriptions([session], [p])
+    assert session.summary is None

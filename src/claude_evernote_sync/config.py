@@ -9,6 +9,7 @@ from pathlib import Path
 DEFAULT_CONFIG_PATH = Path("~/.claude-evernote-sync/config.toml").expanduser()
 DEFAULT_STATE_PATH = Path("~/.claude-evernote-sync/sync_state.json").expanduser()
 VALID_BACKENDS = {"email", "api"}
+VALID_SUBAGENT_MODES = {"keep", "suppress"}
 
 
 @dataclass
@@ -25,6 +26,7 @@ class Config:
     display_timezone: str = "UTC"
     limit: int | None = None
     force: bool = False
+    subagent_notes: str = "keep"
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
@@ -41,23 +43,21 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
 def _from_raw(raw: dict[str, object]) -> Config:
     ev = _section(raw, "evernote")
     scan = _section(raw, "scan")
-    grouping = _section(raw, "grouping")
-    display = _section(raw, "display")
-    notebook_overrides = _str_map(raw.get("notebook_overrides"))
-    projects_dir = Path(str(scan.get("projects_dir", "~/.claude/projects"))).expanduser()
-    overrides_raw = grouping.get("rollup_overrides", [])
-    overrides = [str(x) for x in overrides_raw] if isinstance(overrides_raw, list) else []
+    render = _section(raw, "render")
+    raw_rollup = _section(raw, "grouping").get("rollup_overrides", [])
+    rollup = [str(x) for x in raw_rollup] if isinstance(raw_rollup, list) else []
     return Config(
         backend=str(ev.get("backend", "email")),
         notebook_name=str(ev.get("notebook_name", "claude_convos")),
         notebook_prefix=str(ev.get("notebook_prefix", "")),
-        notebook_overrides=notebook_overrides,
+        notebook_overrides=_str_map(raw.get("notebook_overrides")),
         developer_token=str(ev.get("developer_token", "")),
         api_host=str(ev.get("api_host", "www.evernote.com")),
-        projects_dir=projects_dir,
+        projects_dir=Path(str(scan.get("projects_dir", "~/.claude/projects"))).expanduser(),
         days_back=int(scan.get("days_back", 2)),  # type: ignore[call-overload]
-        rollup_overrides=overrides,
-        display_timezone=str(display.get("timezone", "UTC")),
+        rollup_overrides=rollup,
+        display_timezone=str(_section(raw, "display").get("timezone", "UTC")),
+        subagent_notes=str(render.get("subagent_notes", "keep")),
     )
 
 
@@ -72,6 +72,11 @@ def _validate(config: Config) -> None:
         raise ValueError(f"Invalid backend: {config.backend!r}. Must be one of {VALID_BACKENDS}.")
     if config.backend == "api" and not config.developer_token:
         raise ValueError("backend='api' requires evernote.developer_token in config.toml.")
+    if config.subagent_notes not in VALID_SUBAGENT_MODES:
+        raise ValueError(
+            f"Invalid render.subagent_notes: {config.subagent_notes!r}. "
+            f"Must be one of {VALID_SUBAGENT_MODES}."
+        )
     _validate_timezone(config.display_timezone)
 
 

@@ -337,3 +337,39 @@ def test_sync_all_without_force_keeps_locked_title() -> None:
     SyncJob(destination=dest, state=state, config=Config(force=False)).sync_all([s])
     ctx_arg: SyncContext = dest.sync_session.call_args.args[0]
     assert ctx_arg.title == "Locked Title - x - s1abcdef"
+
+
+def _run_with_mocked_dest(config: Config) -> MagicMock:
+    with (
+        patch("claude_evernote_sync.main.make_destination") as mock_make,
+        patch("claude_evernote_sync.main.load_state") as mock_load_state,
+        patch("claude_evernote_sync.main.save_state"),
+    ):
+        dest = MagicMock()
+        dest.sync_session.return_value = set()
+        mock_make.return_value = dest
+        mock_load_state.return_value = SyncState()
+        run(config, dry_run=False)
+    return dest
+
+
+def test_run_suppress_excludes_subagent_transcripts(tmp_path: Path) -> None:
+    config = Config(
+        backend="email", projects_dir=tmp_path, days_back=365, subagent_notes="suppress"
+    )
+    _write_jsonl(tmp_path / "proj" / "main-session.jsonl")
+    _write_jsonl(tmp_path / "proj" / "main-session" / "subagents" / "agent-x.jsonl")
+    ids = _captured_session_ids(_run_with_mocked_dest(config))
+    assert "main-session" in ids
+    assert "agent-x" not in ids
+
+
+def test_run_keep_includes_and_titles_subagent_from_meta(tmp_path: Path) -> None:
+    config = Config(backend="email", projects_dir=tmp_path, days_back=365)  # keep is default
+    sub = tmp_path / "proj" / "main-session" / "subagents"
+    _write_jsonl(sub / "agent-x.jsonl")
+    (sub / "agent-x.meta.json").write_text('{"description":"Audit pooling and perf"}')
+    dest = _run_with_mocked_dest(config)
+    titles = {c.args[0].title for c in dest.sync_session.call_args_list}
+    assert "agent-x" in _captured_session_ids(dest)
+    assert any(t.startswith("Audit pooling and perf - ") for t in titles)

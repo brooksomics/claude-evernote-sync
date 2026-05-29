@@ -22,8 +22,10 @@ from claude_evernote_sync.state import SyncState, load_state, save_state
 from claude_evernote_sync.summary import (
     attach_ai_titles,
     attach_cross_file_summaries,
+    attach_subagent_descriptions,
     extract_ai_title_records,
     extract_summary_records,
+    is_subagent_path,
 )
 
 LOG_PATH = Path("~/.claude-evernote-sync/sync.log").expanduser()
@@ -45,6 +47,7 @@ def parse_all(paths: list[Path]) -> list[Session]:
     attach_cross_file_summaries(resolved, summaries)
     ai_titles = [r for p in paths for r in extract_ai_title_records(p)]
     attach_ai_titles(resolved, ai_titles)
+    attach_subagent_descriptions(resolved, paths)
     return resolved
 
 
@@ -97,6 +100,8 @@ class SyncJob:
 
 def run(config: Config, dry_run: bool = False) -> int:
     paths = discover_jsonl_files(config.projects_dir, config.days_back)
+    if config.subagent_notes == "suppress":
+        paths = [p for p in paths if not is_subagent_path(p)]
     logger.info("found %d JSONL files within %d days", len(paths), config.days_back)
     sessions = parse_all(paths)
     if config.limit is not None:

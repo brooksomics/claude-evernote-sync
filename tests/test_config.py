@@ -125,3 +125,20 @@ def test_load_config_notebook_prefix(tmp_path: Path) -> None:
     cfg_path = tmp_path / "config.toml"
     cfg_path.write_text('[evernote]\nbackend = "email"\nnotebook_prefix = "convos_"\n')
     assert load_config(cfg_path).notebook_prefix == "convos_"
+
+
+def test_config_default_subagent_notes_is_keep() -> None:
+    assert Config().subagent_notes == "keep"
+
+
+def test_load_config_subagent_notes_suppress(tmp_path: Path) -> None:
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text('[evernote]\nbackend = "email"\n[render]\nsubagent_notes = "suppress"\n')
+    assert load_config(cfg_path).subagent_notes == "suppress"
+
+
+def test_load_config_invalid_subagent_notes_rejected(tmp_path: Path) -> None:
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text('[evernote]\nbackend = "email"\n[render]\nsubagent_notes = "bogus"\n')
+    with pytest.raises(ValueError, match="subagent_notes"):
+        load_config(cfg_path)
