@@ -5,10 +5,12 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from claude_evernote_sync.tool_calls import ToolCall, extract_tool_calls
 
 CONVERSATION_TYPES = {"user", "assistant"}
 ANSI_CSI_RE = re.compile(r"\x1b\[[\d;]*[a-zA-Z]")
@@ -28,6 +30,7 @@ class Message:
     role: str
     text: str
     ts: datetime
+    tool_calls: tuple[ToolCall, ...] = ()
 
 
 @dataclass
@@ -88,14 +91,18 @@ def _extract_text_from_content(content: Any) -> str:
 def _extract_message(record: dict[str, Any]) -> Message | None:
     if record.get("type") not in CONVERSATION_TYPES:
         return None
-    msg = record.get("message") or {}
-    text = _extract_text_from_content(msg.get("content")).strip()
-    if not text or is_slash_command_lifecycle(text):
+    content = (record.get("message") or {}).get("content")
+    text = _extract_text_from_content(content).strip()
+    if is_slash_command_lifecycle(text):
         return None
-    text = strip_ansi(text)
+    tool_calls = extract_tool_calls(content)
+    if not text and not tool_calls:
+        return None
     ts = _parse_timestamp(record["timestamp"])
     uuid = str(record.get("uuid") or f"{record.get('sessionId', '?')}:{ts.isoformat()}")
-    return Message(uuid=uuid, role=record["type"], text=text, ts=ts)
+    return Message(
+        uuid=uuid, role=record["type"], text=strip_ansi(text), ts=ts, tool_calls=tool_calls
+    )
 
 
 def _iter_records(path: Path) -> Iterator[dict[str, Any]]:
@@ -117,8 +124,32 @@ def _first_value(records: list[dict[str, Any]], key: str) -> Any:
     return None
 
 
+def _append_or_merge(messages: list[Message], msg: Message) -> None:
+    """Fold a tool-only assistant record into the preceding assistant message.
+
+    Claude Code often splits one assistant turn across records (text in one,
+    tool_use in the next). Merging keeps the message set — and the email
+    append/state bookkeeping — identical to text-only parsing.
+    """
+    can_merge = (
+        not msg.text
+        and msg.role == "assistant"
+        and bool(messages)
+        and messages[-1].role == "assistant"
+    )
+    if can_merge:
+        prev = messages[-1]
+        messages[-1] = replace(prev, tool_calls=prev.tool_calls + msg.tool_calls)
+    else:
+        messages.append(msg)
+
+
 def _build_session(path: Path, records: list[dict[str, Any]]) -> Session | None:
-    messages = [m for m in (_extract_message(r) for r in records) if m]
+    messages: list[Message] = []
+    for record in records:
+        msg = _extract_message(record)
+        if msg is not None:
+            _append_or_merge(messages, msg)
     if not messages:
         return None
     return Session(

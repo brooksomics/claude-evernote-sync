@@ -142,3 +142,20 @@ def test_load_config_invalid_subagent_notes_rejected(tmp_path: Path) -> None:
     cfg_path.write_text('[evernote]\nbackend = "email"\n[render]\nsubagent_notes = "bogus"\n')
     with pytest.raises(ValueError, match="subagent_notes"):
         load_config(cfg_path)
+
+
+def test_config_default_content_depth_is_full() -> None:
+    assert Config().content_depth == "full"
+
+
+def test_load_config_content_depth_conversation(tmp_path: Path) -> None:
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text('[evernote]\nbackend = "email"\n[render]\ncontent_depth = "conversation"\n')
+    assert load_config(cfg_path).content_depth == "conversation"
+
+
+def test_load_config_invalid_content_depth_rejected(tmp_path: Path) -> None:
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text('[evernote]\nbackend = "email"\n[render]\ncontent_depth = "bogus"\n')
+    with pytest.raises(ValueError, match="content_depth"):
+        load_config(cfg_path)

@@ -66,6 +66,14 @@ timezone = "UTC"
 #   "suppress" — skip sub-agent transcripts; only top-level sessions sync.
 subagent_notes = "keep"
 
+# How much of each session to render:
+#   "full"         — the dialogue plus a compact, foldable list of the tool
+#                    calls the assistant made (Bash, Read, Edit, Task, ...),
+#                    so you can see what it actually did. Default.
+#   "conversation" — just the user/assistant dialogue; no tool-call lines.
+# (Code blocks the assistant writes always render, regardless of this setting.)
+content_depth = "full"
+
 [grouping]
 # By default, each session is rolled up under its git repo root's basename.
 # A session in a non-git directory uses that directory's name.

@@ -67,6 +67,13 @@ def test_preserves_fenced_code_blocks(sample_session: Session) -> None:
     assert "```" in full_text
 
 
+def test_assistant_message_carries_merged_tool_calls(sample_session: Session) -> None:
+    """The tool-only assistant record (a3: Read) folds into the preceding
+    assistant text turn rather than becoming its own message."""
+    tool_names = [tc.name for m in sample_session.messages for tc in m.tool_calls]
+    assert "Read" in tool_names
+
+
 def test_message_timestamps_are_datetimes(sample_session: Session) -> None:
     for m in sample_session.messages:
         assert isinstance(m.ts, datetime)

@@ -53,7 +53,10 @@ def parse_all(paths: list[Path]) -> list[Session]:
 
 def make_destination(config: Config) -> Destination:
     """Instantiate the destination selected by `config.backend`."""
-    renderer = Renderer(timezone=resolve_timezone(config.display_timezone))
+    renderer = Renderer(
+        timezone=resolve_timezone(config.display_timezone),
+        content_depth=config.content_depth,
+    )
     if config.backend == "email":
         return EmailDestination(creds=load_credentials(), renderer=renderer)
     client = EvernoteSync(config.developer_token, config.api_host)
