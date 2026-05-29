@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 CONVERSATION_TYPES = {"user", "assistant"}
-CODE_FENCE_RE = re.compile(r"```[\s\S]*?```", re.MULTILINE)
 ANSI_CSI_RE = re.compile(r"\x1b\[[\d;]*[a-zA-Z]")
 ANSI_SGR_BARE_RE = re.compile(r"\[\d+(?:;\d+)*m")
 SLASH_COMMAND_PREFIXES = (
@@ -49,11 +48,6 @@ class Session:
     @property
     def duration_seconds(self) -> int:
         return int((self.end_ts - self.start_ts).total_seconds())
-
-
-def strip_code_fences(text: str) -> str:
-    """Remove ```...``` fenced code blocks; keep inline `code` backticks."""
-    return CODE_FENCE_RE.sub("", text)
 
 
 def strip_ansi(text: str) -> str:
@@ -95,8 +89,7 @@ def _extract_message(record: dict[str, Any]) -> Message | None:
     if record.get("type") not in CONVERSATION_TYPES:
         return None
     msg = record.get("message") or {}
-    text = _extract_text_from_content(msg.get("content"))
-    text = strip_code_fences(text).strip()
+    text = _extract_text_from_content(msg.get("content")).strip()
     if not text or is_slash_command_lifecycle(text):
         return None
     text = strip_ansi(text)

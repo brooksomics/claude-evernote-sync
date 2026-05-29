@@ -11,7 +11,6 @@ from claude_evernote_sync.parser import (
     is_slash_command_lifecycle,
     parse_jsonl_file,
     strip_ansi,
-    strip_code_fences,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -61,10 +60,11 @@ def test_strips_tool_result_messages(sample_session: Session) -> None:
     assert "file contents" not in " ".join(user_texts)
 
 
-def test_strips_fenced_code_blocks(sample_session: Session) -> None:
+def test_preserves_fenced_code_blocks(sample_session: Session) -> None:
+    """Code is kept in the parsed text now; rendering it is the formatter's job."""
     full_text = " ".join(m.text for m in sample_session.messages)
-    assert "def old()" not in full_text
-    assert "```" not in full_text
+    assert "def old()" in full_text
+    assert "```" in full_text
 
 
 def test_message_timestamps_are_datetimes(sample_session: Session) -> None:
@@ -101,24 +101,6 @@ def test_malformed_lines_are_skipped() -> None:
 
 def test_missing_file_returns_none(tmp_path: Path) -> None:
     assert parse_jsonl_file(tmp_path / "nonexistent.jsonl") is None
-
-
-def test_strip_code_fences_simple() -> None:
-    text = "Before\n```python\ndef x(): pass\n```\nAfter"
-    assert strip_code_fences(text).strip() == "Before\n\nAfter"
-
-
-def test_strip_code_fences_multiple() -> None:
-    text = "A\n```\ncode1\n```\nB\n```\ncode2\n```\nC"
-    result = strip_code_fences(text)
-    assert "code1" not in result
-    assert "code2" not in result
-    assert "A" in result and "B" in result and "C" in result
-
-
-def test_strip_code_fences_inline_backticks_kept() -> None:
-    text = "Use the `foo` function."
-    assert strip_code_fences(text) == text
 
 
 def test_message_dataclass() -> None:

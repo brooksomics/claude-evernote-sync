@@ -35,6 +35,48 @@ def xml_escape(text: str) -> str:
     return out
 
 
+def _split_fenced(text: str) -> list[tuple[bool, str]]:
+    """Split text into (is_code, segment) parts, toggling on ``` fence lines.
+
+    Fence lines (and any language tag) are dropped. Pairing is sequential and
+    line-based, which avoids the orphaned-tag corruption a regex produces on
+    messages with many or nested fences.
+    """
+    segments: list[tuple[bool, str]] = []
+    buf: list[str] = []
+    in_code = False
+    for line in text.split("\n"):
+        if line.lstrip().startswith("```"):
+            segments.append((in_code, "\n".join(buf)))
+            buf, in_code = [], not in_code
+        else:
+            buf.append(line)
+    segments.append((in_code, "\n".join(buf)))
+    return segments
+
+
+def _md(text: str) -> str:
+    """Render prose markdown (bold, inline code, lists, links) to safe XHTML."""
+    return markdown.markdown(xml_escape(text), output_format="xhtml", extensions=["nl2br"])
+
+
+def render_message_text(text: str) -> str:
+    """Render message text: prose via markdown, fenced code as a once-escaped <pre>.
+
+    Escaping fenced code ourselves (rather than letting markdown's fenced_code
+    re-escape an already-escaped string) avoids the double-escape that turns
+    `<` into a literal `&lt;`. <pre> monospace survives Evernote; highlight
+    spans inside it do not, so we don't attempt them.
+    """
+    parts: list[str] = []
+    for is_code, segment in _split_fenced(text):
+        if is_code and segment.strip():
+            parts.append(f"<pre>{xml_escape(segment)}</pre>")
+        elif not is_code:
+            parts.append(_md(segment))
+    return "".join(parts)
+
+
 def note_title_for_session(session: Session, bucket: str) -> str:
     """Build a stable, ASCII-safe note title for one session.
 
@@ -52,9 +94,13 @@ def note_title_for_session(session: Session, bucket: str) -> str:
 
 
 def _first_user_text(session: Session) -> str:
+    """First user message's prose (code fences excluded) for the title fallback."""
     for m in session.messages:
-        if m.role == "user" and m.text.strip():
-            return m.text
+        if m.role != "user":
+            continue
+        prose = "\n".join(s for code, s in _split_fenced(m.text) if not code).strip()
+        if prose:
+            return prose
     return ""
 
 
@@ -108,8 +154,7 @@ class Renderer:
             f'<p><span style="color:{color};font-weight:bold">{label}</span> '
             f'<span style="font-size:11px;color:#888">{ts}</span></p>'
         )
-        body = markdown.markdown(xml_escape(msg.text), output_format="xhtml", extensions=["nl2br"])
-        return header + body
+        return header + render_message_text(msg.text)
 
     def _render_session_meta(self, session: Session) -> str:
         start = session.start_ts.astimezone(self.timezone).strftime("%H:%M")

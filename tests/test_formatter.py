@@ -247,3 +247,43 @@ def test_session_meta_time_range_uses_configured_timezone() -> None:
     s = _session("s", "/x", [_msg("user", "hi", 17), _msg("assistant", "bye", 18)])
     html = Renderer(timezone=LA).render_session_html(s)
     assert "10:00-11:00 PDT" in html
+
+
+def test_render_fenced_code_as_pre(renderer: Renderer) -> None:
+    text = "Here:\n```python\ndef f():\n    pass\n```\ndone"
+    s = _session("s", "/x", [_msg("assistant", text, 10)])
+    html = renderer.render_session_html(s)
+    assert "<pre>" in html
+    assert "def f():" in html
+    assert "```" not in html  # fence markers consumed
+    assert "\npython\n" not in html  # language tag dropped, not orphaned
+
+
+def test_render_fenced_code_preserves_indentation(renderer: Renderer) -> None:
+    s = _session("s", "/x", [_msg("assistant", "```\nif x:\n    go()\n```", 10)])
+    html = renderer.render_session_html(s)
+    assert "    go()" in html  # 4-space indent preserved inside <pre>
+
+
+def test_render_fenced_code_escaped_exactly_once(renderer: Renderer) -> None:
+    s = _session("s", "/x", [_msg("user", "```\nif a < b & c:\n    pass\n```", 10)])
+    html = renderer.render_session_html(s)
+    assert "&lt;" in html
+    assert "&amp;" in html
+    assert "&amp;lt;" not in html  # not double-escaped
+
+
+def test_render_prose_html_still_escaped_when_code_present(renderer: Renderer) -> None:
+    s = _session("s", "/x", [_msg("user", "<script>x</script>\n```\ncode\n```", 10)])
+    html = renderer.render_session_html(s)
+    assert "&lt;script&gt;" in html
+    assert "<script>" not in html
+
+
+def test_note_title_skips_code_in_fallback() -> None:
+    s = _session(
+        "abc12345", "/x", [_msg("user", "```\ncode_not_title\n```\nReal question here", 10)]
+    )
+    title = note_title_for_session(s, "repo")
+    assert "code_not_title" not in title
+    assert "Real question here" in title
