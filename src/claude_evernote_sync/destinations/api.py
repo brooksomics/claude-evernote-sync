@@ -25,7 +25,7 @@ class ApiDestination:
 
     def sync_session(self, ctx: SyncContext) -> set[str]:
         nb_guid = self._resolve_notebook(ctx.notebook_name)
-        enml = self.renderer.render_session_enml(ctx.session, ctx.title)
+        enml = self.renderer.render_session_enml(ctx.session)
         self.client.upsert_note(nb_guid, ctx.title, enml)
         return {m.uuid for m in ctx.session.messages}
 

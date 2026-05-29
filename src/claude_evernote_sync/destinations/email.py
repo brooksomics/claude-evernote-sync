@@ -30,7 +30,7 @@ class EmailDestination:
     def _build_note(self, ctx: SyncContext) -> EmailNote:
         nb = ctx.notebook_name
         if ctx.is_first_sync:
-            html = self.renderer.render_session_html(ctx.session, ctx.title)
+            html = self.renderer.render_session_html(ctx.session)
             return EmailNote(title=ctx.title, html_body=html, append=False, notebook=nb)
         html = self.renderer.render_new_messages_html(ctx.new_messages)
         return EmailNote(title=ctx.title, html_body=html, append=True, notebook=nb)

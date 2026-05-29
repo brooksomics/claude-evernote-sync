@@ -122,7 +122,7 @@ def test_resolve_timezone_invalid_raises() -> None:
 
 
 def test_render_session_enml_wrapped(renderer: Renderer, simple_session: Session) -> None:
-    enml = renderer.render_session_enml(simple_session, "Topic - repo - sessionab")
+    enml = renderer.render_session_enml(simple_session)
     assert enml.startswith('<?xml version="1.0" encoding="UTF-8"?>')
     assert "<!DOCTYPE en-note" in enml
     assert "<en-note>" in enml
@@ -130,27 +130,28 @@ def test_render_session_enml_wrapped(renderer: Renderer, simple_session: Session
 
 
 def test_render_session_enml_includes_messages(renderer: Renderer, simple_session: Session) -> None:
-    enml = renderer.render_session_enml(simple_session, "Topic")
+    enml = renderer.render_session_enml(simple_session)
     assert "Hello, can you help refactor this?" in enml
     assert "Of course!" in enml
     assert "Thanks" in enml
 
 
-def test_render_session_html_starts_with_title_heading(
+def test_render_session_html_omits_duplicate_title(
     renderer: Renderer, simple_session: Session
 ) -> None:
-    html = renderer.render_session_html(simple_session, "My Topic")
-    assert "<h1>My Topic</h1>" in html
+    """The Evernote note title already shows above the body; don't repeat it as an <h1>."""
+    html = renderer.render_session_html(simple_session)
+    assert "<h1>" not in html
 
 
 def test_render_session_html_no_enml_wrapper(renderer: Renderer, simple_session: Session) -> None:
-    html = renderer.render_session_html(simple_session, "Topic")
+    html = renderer.render_session_html(simple_session)
     assert "<?xml" not in html
     assert "<en-note>" not in html
 
 
 def test_render_session_html_includes_meta(renderer: Renderer, simple_session: Session) -> None:
-    html = renderer.render_session_html(simple_session, "Topic")
+    html = renderer.render_session_html(simple_session)
     assert "/Users/bubba/Documents/git/myrepo" in html
     assert "main" in html
     assert "1.0.108" in html
@@ -158,46 +159,59 @@ def test_render_session_html_includes_meta(renderer: Renderer, simple_session: S
     assert "session-" in html
 
 
+def test_render_meta_uses_small_gray_not_italic(
+    renderer: Renderer, simple_session: Session
+) -> None:
+    """Metadata is de-emphasized with survivor styling (small + gray), not <i> italics."""
+    html = renderer.render_session_html(simple_session)
+    assert "font-size:11px" in html
+    assert "color:#888" in html
+
+
+def test_render_uses_colored_you_and_claude_role_labels(
+    renderer: Renderer, simple_session: Session
+) -> None:
+    html = renderer.render_session_html(simple_session)
+    assert 'font-weight:bold">You</span>' in html
+    assert 'font-weight:bold">Claude</span>' in html
+    assert "#4f46e5" in html  # You (indigo)
+    assert "#d97706" in html  # Claude (amber)
+
+
 def test_render_escapes_html_in_messages(renderer: Renderer) -> None:
     s = _session("s1", "/x", [_msg("user", "<script>alert('xss')</script>", 10)])
-    html = renderer.render_session_html(s, "Topic")
+    html = renderer.render_session_html(s)
     assert "<script>" not in html
     assert "&lt;script&gt;" in html
 
 
-def test_render_escapes_html_in_title(renderer: Renderer, simple_session: Session) -> None:
-    html = renderer.render_session_html(simple_session, "<script>")
-    assert "<h1><script>" not in html
-    assert "<h1>&lt;script&gt;</h1>" in html
-
-
 def test_render_converts_bold_markdown(renderer: Renderer) -> None:
     s = _session("s", "/x", [_msg("user", "This is **bold** text.", 10)])
-    html = renderer.render_session_html(s, "Topic")
+    html = renderer.render_session_html(s)
     assert "<strong>bold</strong>" in html
 
 
 def test_render_converts_italic_markdown(renderer: Renderer) -> None:
     s = _session("s", "/x", [_msg("user", "An *italic* phrase.", 10)])
-    html = renderer.render_session_html(s, "Topic")
+    html = renderer.render_session_html(s)
     assert "<em>italic</em>" in html
 
 
 def test_render_converts_inline_code_markdown(renderer: Renderer) -> None:
     s = _session("s", "/x", [_msg("user", "Use `foo()` to call.", 10)])
-    html = renderer.render_session_html(s, "Topic")
+    html = renderer.render_session_html(s)
     assert "<code>foo()</code>" in html
 
 
 def test_render_converts_link_markdown(renderer: Renderer) -> None:
     s = _session("s", "/x", [_msg("user", "See [the docs](https://example.com).", 10)])
-    html = renderer.render_session_html(s, "Topic")
+    html = renderer.render_session_html(s)
     assert '<a href="https://example.com">the docs</a>' in html
 
 
 def test_render_preserves_newlines_as_br(renderer: Renderer) -> None:
     s = _session("s", "/x", [_msg("assistant", "line one\nline two", 10)])
-    html = renderer.render_session_html(s, "Topic")
+    html = renderer.render_session_html(s)
     assert "<br" in html
 
 
@@ -218,17 +232,18 @@ def test_render_new_messages_uses_configured_timezone() -> None:
 
 def test_message_timestamp_uses_configured_timezone() -> None:
     s = _session("s", "/x", [_msg("user", "hi", 18)])  # 18:00 UTC = 11:00 PDT
-    html = Renderer(timezone=LA).render_session_html(s, "Topic")
-    assert "11:00:00 PDT" in html
+    html = Renderer(timezone=LA).render_session_html(s)
+    assert "11:00 PDT" in html
+
+
+def test_message_timestamp_is_minute_precision_no_seconds() -> None:
+    s = _session("s", "/x", [_msg("user", "hi", 14)])
+    html = Renderer().render_session_html(s)
+    assert "14:00 UTC" in html
+    assert "14:00:00" not in html
 
 
 def test_session_meta_time_range_uses_configured_timezone() -> None:
     s = _session("s", "/x", [_msg("user", "hi", 17), _msg("assistant", "bye", 18)])
-    html = Renderer(timezone=LA).render_session_html(s, "Topic")
+    html = Renderer(timezone=LA).render_session_html(s)
     assert "10:00-11:00 PDT" in html
-
-
-def test_utc_renderer_unchanged_format() -> None:
-    s = _session("s", "/x", [_msg("user", "hi", 14)])
-    html = Renderer().render_session_html(s, "Topic")
-    assert "14:00:00 UTC" in html
