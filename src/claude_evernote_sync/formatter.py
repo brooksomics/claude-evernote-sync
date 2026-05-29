@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 import markdown
 
 from claude_evernote_sync.parser import Message, Session
+from claude_evernote_sync.tool_calls import ToolCall
 
 ENML_PROLOGUE = (
     '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -77,6 +78,24 @@ def render_message_text(text: str) -> str:
     return "".join(parts)
 
 
+def _render_tool_call(call: ToolCall) -> str:
+    name = f"<code>{xml_escape(call.name)}</code>"
+    if not call.summary:
+        return f"<li>{name}</li>"
+    return f"<li>{name} {xml_escape(call.summary)}</li>"
+
+
+def render_tool_calls(calls: tuple[ToolCall, ...]) -> str:
+    """Compact, foldable list of what the assistant did (tool name + brief arg).
+
+    A nested <ul> under a small "tools" item: both survive Evernote's email
+    conversion, and the parent item folds the calls away in the app.
+    """
+    items = "".join(_render_tool_call(c) for c in calls)
+    label = '<span style="font-size:11px;color:#888">tools</span>'
+    return f"<ul><li>{label}<ul>{items}</ul></li></ul>"
+
+
 def note_title_for_session(session: Session, bucket: str) -> str:
     """Build a stable, ASCII-safe note title for one session.
 
@@ -127,6 +146,7 @@ class Renderer:
     """Renders a single session to ENML / HTML in a configured display timezone."""
 
     timezone: tzinfo = field(default=UTC)
+    content_depth: str = "full"
 
     def render_session_enml(self, session: Session) -> str:
         """ENML note (with prologue/epilogue) for the API destination."""
@@ -154,7 +174,10 @@ class Renderer:
             f'<p><span style="color:{color};font-weight:bold">{label}</span> '
             f'<span style="font-size:11px;color:#888">{ts}</span></p>'
         )
-        return header + render_message_text(msg.text)
+        body = header + render_message_text(msg.text) if msg.text else ""
+        if self.content_depth != "conversation" and msg.tool_calls:
+            body += render_tool_calls(msg.tool_calls)
+        return body
 
     def _render_session_meta(self, session: Session) -> str:
         start = session.start_ts.astimezone(self.timezone).strftime("%H:%M")

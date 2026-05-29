@@ -12,6 +12,7 @@ from claude_evernote_sync.formatter import (
     xml_escape,
 )
 from claude_evernote_sync.parser import Message, Session
+from claude_evernote_sync.tool_calls import ToolCall
 
 LA = ZoneInfo("America/Los_Angeles")
 
@@ -287,3 +288,30 @@ def test_note_title_skips_code_in_fallback() -> None:
     title = note_title_for_session(s, "repo")
     assert "code_not_title" not in title
     assert "Real question here" in title
+
+
+def _assistant_with_tools() -> Session:
+    ts = datetime(2026, 5, 15, 10, tzinfo=UTC)
+    m = Message("a1", "assistant", "Let me look.", ts, tool_calls=(ToolCall("Bash", "git status"),))
+    return _session("s", "/x", [m])
+
+
+def test_render_full_shows_compact_tool_calls(renderer: Renderer) -> None:
+    html = renderer.render_session_html(_assistant_with_tools())
+    assert "<code>Bash</code>" in html
+    assert "git status" in html
+    assert "<ul>" in html  # foldable list
+
+
+def test_render_conversation_hides_tool_calls() -> None:
+    html = Renderer(content_depth="conversation").render_session_html(_assistant_with_tools())
+    assert "Let me look." in html  # dialogue still rendered
+    assert "<code>Bash</code>" not in html
+    assert "git status" not in html
+
+
+def test_render_tool_call_without_summary_omits_trailing_space(renderer: Renderer) -> None:
+    ts = datetime(2026, 5, 15, 10, tzinfo=UTC)
+    m = Message("a1", "assistant", "go", ts, tool_calls=(ToolCall("TodoWrite", ""),))
+    html = renderer.render_session_html(_session("s", "/x", [m]))
+    assert "<li><code>TodoWrite</code></li>" in html

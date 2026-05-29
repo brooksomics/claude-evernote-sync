@@ -197,6 +197,14 @@ def test_make_destination_api_backend() -> None:
     assert isinstance(dest, ApiDestination)
 
 
+def test_make_destination_passes_content_depth_to_renderer() -> None:
+    config = Config(backend="email", content_depth="conversation")
+    with patch("claude_evernote_sync.main.load_credentials") as mock_load:
+        mock_load.return_value = MagicMock()
+        dest = make_destination(config)
+    assert dest.renderer.content_depth == "conversation"
+
+
 def test_run_dry_run_does_not_create_destination(tmp_path: Path) -> None:
     config = Config(projects_dir=tmp_path, days_back=30)
     _write_jsonl(tmp_path / "encoded" / "session-1.jsonl")

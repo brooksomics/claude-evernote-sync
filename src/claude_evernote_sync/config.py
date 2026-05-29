@@ -10,6 +10,7 @@ DEFAULT_CONFIG_PATH = Path("~/.claude-evernote-sync/config.toml").expanduser()
 DEFAULT_STATE_PATH = Path("~/.claude-evernote-sync/sync_state.json").expanduser()
 VALID_BACKENDS = {"email", "api"}
 VALID_SUBAGENT_MODES = {"keep", "suppress"}
+VALID_CONTENT_DEPTHS = {"conversation", "full"}
 
 
 @dataclass
@@ -27,6 +28,7 @@ class Config:
     limit: int | None = None
     force: bool = False
     subagent_notes: str = "keep"
+    content_depth: str = "full"
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
@@ -58,6 +60,7 @@ def _from_raw(raw: dict[str, object]) -> Config:
         rollup_overrides=rollup,
         display_timezone=str(_section(raw, "display").get("timezone", "UTC")),
         subagent_notes=str(render.get("subagent_notes", "keep")),
+        content_depth=str(render.get("content_depth", "full")),
     )
 
 
@@ -76,6 +79,11 @@ def _validate(config: Config) -> None:
         raise ValueError(
             f"Invalid render.subagent_notes: {config.subagent_notes!r}. "
             f"Must be one of {VALID_SUBAGENT_MODES}."
+        )
+    if config.content_depth not in VALID_CONTENT_DEPTHS:
+        raise ValueError(
+            f"Invalid render.content_depth: {config.content_depth!r}. "
+            f"Must be one of {VALID_CONTENT_DEPTHS}."
         )
     _validate_timezone(config.display_timezone)
 
