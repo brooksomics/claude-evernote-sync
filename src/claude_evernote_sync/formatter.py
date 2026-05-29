@@ -21,6 +21,11 @@ ESCAPES = (("&", "&amp;"), ("<", "&lt;"), (">", "&gt;"), ('"', "&quot;"), ("'", 
 
 TITLE_MAX_LEN = 80
 
+# Role -> (display label, inline text color). Evernote's email->ENML conversion
+# strips background/border/padding, so role distinction rides on colored bold
+# text rather than tinted boxes.
+ROLE_STYLES = {"user": ("You", "#4f46e5"), "assistant": ("Claude", "#d97706")}
+
 
 def xml_escape(text: str) -> str:
     """Escape characters reserved in XML/ENML."""
@@ -77,13 +82,13 @@ class Renderer:
 
     timezone: tzinfo = field(default=UTC)
 
-    def render_session_enml(self, session: Session, title: str) -> str:
+    def render_session_enml(self, session: Session) -> str:
         """ENML note (with prologue/epilogue) for the API destination."""
-        return ENML_PROLOGUE + self._render_full_body(session, title) + "\n" + ENML_EPILOGUE
+        return ENML_PROLOGUE + self._render_full_body(session) + "\n" + ENML_EPILOGUE
 
-    def render_session_html(self, session: Session, title: str) -> str:
+    def render_session_html(self, session: Session) -> str:
         """HTML body for the initial email-to-note (creates the note)."""
-        return self._render_full_body(session, title)
+        return self._render_full_body(session)
 
     def render_new_messages_html(self, new_msgs: list[Message], now: datetime | None = None) -> str:
         """HTML body for an append email — only new messages, with timestamp marker."""
@@ -97,9 +102,12 @@ class Renderer:
         return f"{local.strftime(fmt)} {local.tzname() or 'UTC'}"
 
     def _render_message(self, msg: Message) -> str:
-        role_label = "User" if msg.role == "user" else "Assistant"
-        ts = self._fmt_time(msg.ts, "%H:%M:%S")
-        header = f"<p><b>{role_label}</b> <i>({ts})</i></p>"
+        label, color = ROLE_STYLES.get(msg.role, ROLE_STYLES["assistant"])
+        ts = self._fmt_time(msg.ts, "%H:%M")
+        header = (
+            f'<p><span style="color:{color};font-weight:bold">{label}</span> '
+            f'<span style="font-size:11px;color:#888">{ts}</span></p>'
+        )
         body = markdown.markdown(xml_escape(msg.text), output_format="xhtml", extensions=["nl2br"])
         return header + body
 
@@ -114,10 +122,9 @@ class Renderer:
             f"id: {xml_escape(session.session_id[:8])}",
             f"{start}-{end_label}",
         ]
-        return f"<p><i>{' · '.join(meta)}</i></p>"
+        return f'<p><span style="font-size:11px;color:#888">{" · ".join(meta)}</span></p>'
 
-    def _render_full_body(self, session: Session, title: str) -> str:
-        heading = f"<h1>{xml_escape(title)}</h1>"
+    def _render_full_body(self, session: Session) -> str:
         meta = self._render_session_meta(session)
         messages_html = "\n".join(self._render_message(m) for m in session.messages)
-        return heading + "\n" + meta + "\n" + messages_html
+        return meta + "\n" + messages_html
