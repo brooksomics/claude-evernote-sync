@@ -231,14 +231,6 @@ A decade of heavy use lands around 90 MB — well under any practical concern, a
 
 There is no automatic pruning. If state growth ever becomes an actual problem, you can `rm ~/.claude-evernote-sync/sync_state.json` and accept the duplicate-note tradeoff for any re-synced historical sessions.
 
-### Migrating from the old `(date, bucket)` rollup model
-
-Earlier versions of this tool grouped sessions into one note per `(date, bucket)` pair. The new per-session model uses a different state-file schema (`version: 2`); state files from before this change are silently discarded on load. After upgrading:
-
-- Old daily-rollup notes in Evernote remain as-is — they're frozen archives. The tool no longer writes to them.
-- The next sync (without `--limit 0`) will re-send every session in the lookback window as a new per-session note. Expect overlap between the old rollup notes and the new per-session notes for that window.
-- Easiest cleanup: delete the old `Claude Sessions - <bucket> - <date>` notes manually once you confirm the new per-session notes look right.
-
 ## Files written
 
 - `~/.claude-evernote-sync/config.toml` — your config (no secrets)
