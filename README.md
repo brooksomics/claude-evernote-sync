@@ -135,40 +135,11 @@ Each session becomes one note. The note title has the form `<topic> - <bucket> -
 
 Notes are rendered for skimmability, not as a raw dump: a small gray metadata line, then the conversation with **You** / **Claude** role labels (colored), minute-precision timestamps, code blocks, and — at `content_depth = "full"` — a compact, foldable list of the tool calls each turn made. The Evernote apps layer on more automatically: code blocks become **syntax-highlighted code widgets** with a copy button, and the assistant's markdown headings populate the note's **table of contents** and collapsible sections.
 
-A synthetic example (`tests/fixtures/demo_session.jsonl`, rendered and asserted by `tests/test_showcase.py`):
+Here's that demo session rendered in the Evernote desktop app. The fixture (`tests/fixtures/demo_session.jsonl`) is pinned by `tests/test_showcase.py`, and you can reproduce the note yourself with `uv run python scripts/preview_render.py --demo`:
 
-```text
-Add an ASCII Mandelbrot renderer - asciiart - demo_ses        (note title)
-path: .../asciiart · branch: main · version: 2.1.156 · messages: 5 · 14:02-14:05
+![A Claude Code session rendered as an Evernote note: colored You/Claude role labels, a syntax-highlighted Python code widget with a copy button, and compact tool-call lists under each turn.](docs/demo-note.png)
 
-You · 14:02
-Add a tiny ASCII Mandelbrot renderer to art.py, under 20 lines, width configurable.
-
-Claude · 14:02
-On it - let me check the current module first.
-  tools
-    • Read · art.py
-
-Claude · 14:03
-The renderer                                  (## heading -> note TOC + foldable)
-Here's a compact escape-time renderer, one complex iteration per cell:
-    def mandelbrot(width=80, height=24):       (code -> highlighted code-widget)
-        for y in range(height):
-            ...
-  tools
-    • Write · art.py
-
-Claude · 14:03
-Let me render it once, then hand a sub-agent the test.
-  tools
-    • Bash · Render a 60-wide Mandelbrot to eyeball it
-    • Task · Write a pytest checking mandelbrot output dimensions
-
-Claude · 14:05
-Done - renders cleanly, sub-agent added a dimensions test. 20 lines exactly.
-```
-
-(Colors, code-widget highlighting, and heading folding/TOC are Evernote-app rendering; the stored note is plain inline-styled HTML.)
+Colors, the code-widget syntax highlighting, and heading-based folding/TOC are Evernote-app rendering; the stored note is plain inline-styled HTML.
 
 ## Configuration reference
 
@@ -259,14 +230,6 @@ A decade of heavy use lands around 90 MB — well under any practical concern, a
 - Limit the re-sync to brand-new content with `--days 1 --limit 1` so only one or two sessions touch Evernote at a time
 
 There is no automatic pruning. If state growth ever becomes an actual problem, you can `rm ~/.claude-evernote-sync/sync_state.json` and accept the duplicate-note tradeoff for any re-synced historical sessions.
-
-### Migrating from the old `(date, bucket)` rollup model
-
-Earlier versions of this tool grouped sessions into one note per `(date, bucket)` pair. The new per-session model uses a different state-file schema (`version: 2`); state files from before this change are silently discarded on load. After upgrading:
-
-- Old daily-rollup notes in Evernote remain as-is — they're frozen archives. The tool no longer writes to them.
-- The next sync (without `--limit 0`) will re-send every session in the lookback window as a new per-session note. Expect overlap between the old rollup notes and the new per-session notes for that window.
-- Easiest cleanup: delete the old `Claude Sessions - <bucket> - <date>` notes manually once you confirm the new per-session notes look right.
 
 ## Files written
 

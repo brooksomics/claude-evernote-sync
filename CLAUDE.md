@@ -4,7 +4,7 @@ Project instructions for Claude Code working in this repo. Keep it short and poi
 
 ## What this is
 
-A Python CLI + hourly launchd job that mirrors Claude Code session JSONL files (`~/.claude/projects/`) into Evernote as daily rollup notes per git repo.
+A Python CLI + hourly launchd job that mirrors Claude Code session JSONL files (`~/.claude/projects/`) into Evernote as one note per session, organized into per-repo notebooks.
 
 Two backends behind a pluggable `Destination` Protocol:
 - **`email`** (default, works today): SMTP via Gmail to Evernote's email-to-note address. Append-only — uses per-session synced-UUID state to avoid resending; each session is a separate Evernote note with a title locked at first sync.
