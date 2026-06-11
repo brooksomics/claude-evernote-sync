@@ -8,6 +8,7 @@ import pytest
 from claude_evernote_sync.formatter import (
     Renderer,
     note_title_for_session,
+    render_message_text,
     resolve_timezone,
     xml_escape,
 )
@@ -208,6 +209,43 @@ def test_render_converts_link_markdown(renderer: Renderer) -> None:
     s = _session("s", "/x", [_msg("user", "See [the docs](https://example.com).", 10)])
     html = renderer.render_session_html(s)
     assert '<a href="https://example.com">the docs</a>' in html
+
+
+PIPE_TABLE = "| # | Action | Cost |\n|---|---|---|\n| 1 | Term life | $170/mo |"
+
+
+def test_render_converts_pipe_table_to_html_table() -> None:
+    html = render_message_text(PIPE_TABLE)
+    assert "<table" in html
+    assert "<th" in html and "Action" in html
+    assert "<td" in html and "$170/mo" in html
+    assert "|---|" not in html
+
+
+def test_render_table_has_visible_borders() -> None:
+    html = render_message_text(PIPE_TABLE)
+    assert '<table style="border-collapse:collapse">' in html
+    assert html.count("border:1px solid") >= 6  # every th and td
+
+
+def test_render_table_keeps_column_alignment_with_borders() -> None:
+    html = render_message_text("| Left | Right |\n|:---|---:|\n| a | b |")
+    assert '<th style="border:1px solid #ccc;padding:2px 8px;text-align:left">' in html
+    assert '<td style="border:1px solid #ccc;padding:2px 8px;text-align:right">' in html
+
+
+def test_render_table_cells_still_escaped() -> None:
+    html = render_message_text("| H |\n|---|\n| <b>x</b> |")
+    assert "<td" in html
+    assert "<b>" not in html
+    assert "&lt;b&gt;" in html
+
+
+def test_render_table_inside_message(renderer: Renderer) -> None:
+    s = _session("s", "/x", [_msg("assistant", f"Summary:\n\n{PIPE_TABLE}\n\nDone.", 10)])
+    html = renderer.render_session_html(s)
+    assert "<table" in html
+    assert "<p>Summary:</p>" in html
 
 
 def test_render_preserves_newlines_as_br(renderer: Renderer) -> None:
