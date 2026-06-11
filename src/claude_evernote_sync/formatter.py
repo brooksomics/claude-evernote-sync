@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 import markdown
 
 from claude_evernote_sync.parser import Message, Session
+from claude_evernote_sync.tables import style_tables
 from claude_evernote_sync.tool_calls import ToolCall
 
 ENML_PROLOGUE = (
@@ -57,8 +58,11 @@ def _split_fenced(text: str) -> list[tuple[bool, str]]:
 
 
 def _md(text: str) -> str:
-    """Render prose markdown (bold, inline code, lists, links) to safe XHTML."""
-    return markdown.markdown(xml_escape(text), output_format="xhtml", extensions=["nl2br"])
+    """Render prose markdown (bold, inline code, lists, tables, links) to safe XHTML."""
+    html = markdown.markdown(
+        xml_escape(text), output_format="xhtml", extensions=["nl2br", "tables"]
+    )
+    return style_tables(html)
 
 
 def render_message_text(text: str) -> str:
