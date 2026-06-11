@@ -6,12 +6,40 @@ from pathlib import Path
 
 
 def find_git_root(start: Path) -> Path | None:
-    """Walk up from `start` looking for a `.git` directory."""
+    """Walk up from `start` to the repository root.
+
+    A `.git` directory marks the root directly. A `.git` FILE marks a linked
+    worktree (`git worktree add`), which resolves to the main repository so
+    worktree sessions bucket with their repo instead of fragmenting into
+    one notebook per worktree.
+    """
     current = start.resolve()
     for candidate in [current, *current.parents]:
-        if (candidate / ".git").exists():
+        marker = candidate / ".git"
+        if marker.is_dir():
             return candidate
+        if marker.is_file():
+            return _worktree_main_root(marker) or candidate
     return None
+
+
+def _worktree_main_root(git_file: Path) -> Path | None:
+    """Resolve a linked-worktree `.git` file to the main repository root.
+
+    The file holds `gitdir: <main>/.git/worktrees/<name>` (absolute or
+    relative to the worktree root). Anything else — malformed content or a
+    submodule's `.git/modules/...` pointer — returns None, since a submodule
+    is its own project and should keep its own bucket.
+    """
+    pointer = git_file.read_text().strip()
+    if not pointer.startswith("gitdir:"):
+        return None
+    gitdir = Path(pointer.removeprefix("gitdir:").strip())
+    if not gitdir.is_absolute():
+        gitdir = (git_file.parent / gitdir).resolve()
+    if gitdir.parent.name != "worktrees" or gitdir.parent.parent.name != ".git":
+        return None
+    return gitdir.parent.parent.parent
 
 
 def _override_match(cwd: Path, overrides: list[str]) -> str | None:
