@@ -182,6 +182,11 @@ bd close <id>         # Complete work
 - Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
 - Run `bd prime` for detailed command reference and session close protocol
 - Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+- **Sync beads with `scripts/bd-push.sh`, never raw `bd dolt push`.** The issue DB syncs to the
+  public GitHub remote, and `bd dolt push` bypasses git hooks — the wrapper leak-scans issue
+  text, memories, and logs first (`scripts/beads_leak_scan.py`, also run by pre-commit). Never
+  paste credentials, personal email addresses, or financial/personal details into issue
+  descriptions, notes, close reasons, or `bd remember` — they end up on the remote.
 
 **Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
 
