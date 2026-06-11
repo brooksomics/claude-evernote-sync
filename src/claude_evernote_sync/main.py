@@ -51,6 +51,23 @@ def parse_all(paths: list[Path]) -> list[Session]:
     return resolved
 
 
+def filter_quiet(sessions: list[Session], minutes: int, now: datetime) -> list[Session]:
+    """Hold back sessions active within the last `minutes` (0 disables).
+
+    An in-progress session synced mid-conversation produces extra append
+    emails, and each append is a chance for Evernote's title-match to fail
+    and create a duplicate note (e.g. when the note is open in a client).
+    Waiting until a session goes quiet sends most sessions as one email.
+    """
+    if minutes <= 0:
+        return sessions
+    cutoff = now - timedelta(minutes=minutes)
+    kept = [s for s in sessions if s.end_ts <= cutoff]
+    if len(kept) < len(sessions):
+        logger.info("quiet period: holding back %d active session(s)", len(sessions) - len(kept))
+    return kept
+
+
 def make_destination(config: Config) -> Destination:
     """Instantiate the destination selected by `config.backend`."""
     renderer = Renderer(
@@ -106,7 +123,7 @@ def run(config: Config, dry_run: bool = False) -> int:
     if config.subagent_notes == "suppress":
         paths = [p for p in paths if not is_subagent_path(p)]
     logger.info("found %d JSONL files within %d days", len(paths), config.days_back)
-    sessions = parse_all(paths)
+    sessions = filter_quiet(parse_all(paths), config.quiet_minutes, datetime.now(UTC))
     if config.limit is not None:
         sessions = sorted(sessions, key=lambda s: s.end_ts, reverse=True)[: max(0, config.limit)]
         logger.info("limit=%d applied — %d sessions selected", config.limit, len(sessions))

@@ -40,6 +40,22 @@ def test_load_config_full(tmp_path: Path) -> None:
     assert config.rollup_overrides == ["/a/b", "/c/d"]
 
 
+def test_config_default_quiet_minutes() -> None:
+    assert Config().quiet_minutes == 15
+
+
+def test_load_config_quiet_minutes(tmp_path: Path) -> None:
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text('[evernote]\nbackend = "email"\n[scan]\nquiet_minutes = 30\n')
+    assert load_config(cfg_path).quiet_minutes == 30
+
+
+def test_load_config_quiet_minutes_zero_disables(tmp_path: Path) -> None:
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text('[evernote]\nbackend = "email"\n[scan]\nquiet_minutes = 0\n')
+    assert load_config(cfg_path).quiet_minutes == 0
+
+
 def test_load_config_missing_file(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         load_config(tmp_path / "nope.toml")

@@ -155,6 +155,7 @@ developer_token = ""            # required for backend = "api"
 [scan]
 projects_dir = "~/.claude/projects"
 days_back = 2
+quiet_minutes = 15        # hold back sessions active in the last N minutes (0 = off)
 
 [render]
 subagent_notes = "keep"   # "keep" = title sub-agent notes from .meta.json; "suppress" = skip them
@@ -213,6 +214,18 @@ State lives in `~/.claude-evernote-sync/sync_state.json` — one record per sess
 
 Evernote's email-to-note rule for append: a `+` at the end of the subject line tells Evernote to append the body to the most recent note matching the title before the `+`. So the title is locked at first sync (kept in state) — later JSONL summary updates do not retitle the existing note, because the subject is also the matching key.
 
+### Known limitation: appends can silently duplicate
+
+Append-by-title is best-effort on Evernote's side, and SMTP gives no feedback channel — a send that "succeeds" may still land wrong. When Evernote can't match **or can't modify** the target note, it silently creates a *new* note with the same title instead of appending. Known triggers:
+
+- The target note is **open in any Evernote client** at delivery time (open notes are locked against email updates)
+- Sync/title-match races on Evernote's servers
+- Manual renames of the auto-generated note (the locked title in state no longer matches)
+
+The `quiet_minutes` setting (default 15) reduces exposure: a session isn't synced until it's been idle that long, so most sessions go out as a single create email and append sends become rare. Appends still happen when a session resumes after a long gap, so duplicates can't be ruled out entirely.
+
+**Recovery when it happens:** merge the two notes manually in Evernote (copy the newer note's body to the end of the original, then delete the newer one). Note that until you do, *future* appends follow the most recent note with that title — i.e. the conversation continues in the duplicate, so nothing is lost.
+
 ### State file size
 
 The state file (`sync_state.json`) grows by roughly:
@@ -263,7 +276,7 @@ Your conversations transit Gmail's servers en route to Evernote. If you'd rather
 
 **Notes land in my default Evernote notebook instead of the intended one** — The target notebook doesn't exist (or there's a typo). Re-check the bucket name with `--dry-run -v`, confirm a matching notebook exists in Evernote (e.g. `convos_myapp` for bucket `myapp` when `notebook_prefix = "convos_"`), then move the stray notes into it. Future syncs will land correctly.
 
-**Notes don't append, new ones get created instead** — The append `+` syntax requires an exact title match. Don't manually rename the auto-generated notes. Also: a note that's currently open in the Evernote app is locked against email updates; close it and retry.
+**Notes don't append, new ones get created instead** — The append `+` syntax requires an exact title match. Don't manually rename the auto-generated notes. Also: a note that's currently open in the Evernote app is locked against email updates, so the append silently becomes a duplicate note. See [Known limitation: appends can silently duplicate](#known-limitation-appends-can-silently-duplicate) for why this happens and how to recover.
 
 **`backend='api' requires evernote.developer_token`** — You've selected the `api` backend in config but haven't pasted a developer token. Evernote API requests are currently suspended (Jan 2026 onward); use `backend = "email"` instead.
 
