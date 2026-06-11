@@ -11,6 +11,7 @@ from claude_evernote_sync.destinations import SyncContext
 from claude_evernote_sync.main import (
     SyncJob,
     discover_jsonl_files,
+    filter_quiet,
     make_destination,
     parse_all,
     run,
@@ -359,6 +360,35 @@ def _run_with_mocked_dest(config: Config) -> MagicMock:
         mock_load_state.return_value = SyncState()
         run(config, dry_run=False)
     return dest
+
+
+def test_filter_quiet_skips_recently_active_session() -> None:
+    """A session whose last message is inside the quiet window is held back
+    so an in-progress conversation isn't emailed mid-stream (every extra
+    append email is a chance for Evernote to mis-match and duplicate)."""
+    now = datetime(2026, 5, 15, 10, 10, tzinfo=UTC)  # end_ts is 10:05 → 5 min old
+    assert filter_quiet([_session()], 15, now) == []
+
+
+def test_filter_quiet_keeps_idle_session() -> None:
+    now = datetime(2026, 5, 15, 11, 0, tzinfo=UTC)  # end_ts is 10:05 → 55 min old
+    sessions = [_session()]
+    assert filter_quiet(sessions, 15, now) == sessions
+
+
+def test_filter_quiet_zero_disables() -> None:
+    now = datetime(2026, 5, 15, 10, 5, tzinfo=UTC)  # end_ts == now
+    sessions = [_session()]
+    assert filter_quiet(sessions, 0, now) == sessions
+
+
+def test_run_holds_back_active_session(tmp_path: Path) -> None:
+    config = Config(backend="email", projects_dir=tmp_path, days_back=365, quiet_minutes=15)
+    recent = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    _write_jsonl(tmp_path / "session-live.jsonl", ts=recent)
+    _write_jsonl(tmp_path / "session-done.jsonl", ts="2026-05-20T10:00:00.000Z")
+    ids = _captured_session_ids(_run_with_mocked_dest(config))
+    assert ids == ["session-done"]
 
 
 def test_run_suppress_excludes_subagent_transcripts(tmp_path: Path) -> None:

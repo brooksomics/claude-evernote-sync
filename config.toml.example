@@ -43,6 +43,15 @@ projects_dir = "~/.claude/projects"
 # bump (or use --backfill) for initial historical sync.
 days_back = 2
 
+# Quiet period: hold back any session whose last message is newer than N
+# minutes, so an in-progress conversation isn't emailed mid-stream. Fewer
+# partial sends means fewer append emails — and every append is a chance
+# for Evernote's title-match to fail and create a duplicate note (it does
+# this silently, e.g. when the note is open in an Evernote client at
+# delivery time). Held-back sessions are picked up by a later run once
+# they've gone quiet. Set to 0 to disable and sync everything immediately.
+quiet_minutes = 15
+
 [display]
 # Timezone for timestamps inside the rendered notes (the "Update at HH:MM"
 # marker on append emails, per-message timestamps, session start/end times).

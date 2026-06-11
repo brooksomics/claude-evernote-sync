@@ -23,6 +23,7 @@ class Config:
     api_host: str = "www.evernote.com"
     projects_dir: Path = field(default_factory=lambda: Path("~/.claude/projects").expanduser())
     days_back: int = 2
+    quiet_minutes: int = 15
     rollup_overrides: list[str] = field(default_factory=list)
     display_timezone: str = "UTC"
     limit: int | None = None
@@ -57,6 +58,7 @@ def _from_raw(raw: dict[str, object]) -> Config:
         api_host=str(ev.get("api_host", "www.evernote.com")),
         projects_dir=Path(str(scan.get("projects_dir", "~/.claude/projects"))).expanduser(),
         days_back=int(scan.get("days_back", 2)),  # type: ignore[call-overload]
+        quiet_minutes=int(scan.get("quiet_minutes", 15)),  # type: ignore[call-overload]
         rollup_overrides=rollup,
         display_timezone=str(_section(raw, "display").get("timezone", "UTC")),
         subagent_notes=str(render.get("subagent_notes", "keep")),
