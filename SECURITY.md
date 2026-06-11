@@ -32,6 +32,8 @@ The repo enforces this with:
 - `.gitignore` excluding all runtime state files
 - A `pre-commit` hook (`forbid-local-state`) that hard-fails if any of those paths are staged
 - `gitleaks` scanning the diff on every commit and every CI run for high-entropy secrets
+- A `pre-commit` hook (`beads-leak-scan`) scanning the beads issue tracker's data for PII and
+  secret shapes (skipped automatically when `bd` isn't installed)
 
 If you accidentally commit a real credential, **rotate it immediately** (revoke the Gmail app password, regenerate the Evernote email-to-note address) before worrying about git history rewrites — by the time you've noticed, the value is effectively public.
 
@@ -39,6 +41,7 @@ If you accidentally commit a real credential, **rotate it immediately** (revoke 
 
 - **Local attacker (read access to your home dir)**: can read your credentials.json and impersonate the email-to-note flow. Mitigation: `chmod 600`, FileVault on macOS.
 - **Mass scan of public GitHub for `m.evernote.com` strings**: if your `credentials.json` leaks via git, attackers can flood your Evernote with notes. Mitigation: gitignore + gitleaks + the `forbid-local-state` pre-commit hook.
+- **Personal info in the beads issue tracker**: issue text, memories, and interaction logs sync to `refs/dolt/data` on this public repo via `bd dolt push`, which uses bd's own transport and **bypasses git hooks** — gitleaks never sees it. Mitigation: `scripts/beads_leak_scan.py` runs as a pre-commit hook on every commit and inside `scripts/bd-push.sh` (the required way to push beads data); plus a standing rule to keep credentials and personal details out of issue text.
 - **Gmail account compromise**: if your Gmail app password leaks, attackers can send arbitrary email from your address. Mitigation: store only an app-password (revocable independently of your main password); rotate periodically.
 - **MITM between you and smtp.gmail.com**: not possible — `SMTP_SSL` enforces TLS to Gmail; Gmail enforces TLS to Evernote.
 

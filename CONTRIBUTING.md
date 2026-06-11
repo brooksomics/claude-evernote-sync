@@ -23,6 +23,10 @@ pre-commit run --all-files      # runs all pre-commit hooks against the whole tr
 
 CI runs all of the above on every push and pull request. PRs that don't pass CI won't be merged.
 
+One hook (`beads-leak-scan`) guards the maintainer's [beads](https://github.com/gastownhall/beads)
+issue tracker data; it skips automatically when `bd` isn't installed, so contributors don't need
+beads to commit.
+
 ## Coding style
 
 Enforced in CI; the relevant settings live in `pyproject.toml`:
