@@ -10,5 +10,5 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO"
 
-uv run python scripts/beads_leak_scan.py
+python3 scripts/beads_leak_scan.py
 bd dolt push "$@"

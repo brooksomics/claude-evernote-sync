@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
+import pytest
+
 SCRIPT = Path(__file__).parent.parent / "scripts" / "beads_leak_scan.py"
 
 
@@ -75,3 +77,9 @@ def test_main_file_mode_passes_clean_files(tmp_path: Path) -> None:
     clean = tmp_path / "clean.txt"
     clean.write_text("nothing personal here, just ENML tables")
     assert leak_scan.main([str(clean)]) == 0
+
+
+def test_live_mode_skips_cleanly_when_bd_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """CI and external contributors don't have bd; the hook must not block them."""
+    monkeypatch.setattr(leak_scan.shutil, "which", lambda _: None)
+    assert leak_scan.main([]) == 0

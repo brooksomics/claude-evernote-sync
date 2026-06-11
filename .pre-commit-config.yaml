@@ -46,7 +46,9 @@ repos:
         name: scan beads issue data for PII / secrets
         # bd dolt push bypasses git hooks entirely; this catches leaks in the
         # issue DB early, and scripts/bd-push.sh re-checks at push time.
-        entry: uv run python scripts/beads_leak_scan.py
+        # Stdlib-only + plain python3 + skips-without-bd, so it runs anywhere
+        # (CI and contributor machines have neither uv-managed venvs nor bd).
+        entry: python3 scripts/beads_leak_scan.py
         language: system
         always_run: true
         pass_filenames: false

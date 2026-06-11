@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -91,7 +92,14 @@ def _report(findings: list[Finding]) -> int:
 
 
 def main(argv: list[str]) -> int:
-    corpus = {a: Path(a).read_text() for a in argv} if argv else _collect_live()
+    if argv:
+        corpus = {a: Path(a).read_text() for a in argv}
+    elif shutil.which("bd") is None:
+        # CI runners and external contributors don't have beads installed.
+        print("beads leak scan: bd not installed — nothing to scan")
+        return 0
+    else:
+        corpus = _collect_live()
     findings = [f for source, text in corpus.items() for f in scan_text(source, text)]
     return _report(findings)
 
