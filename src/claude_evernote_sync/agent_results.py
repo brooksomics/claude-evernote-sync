@@ -20,9 +20,21 @@ from typing import Any
 
 TASK_NOTIFICATION_TAG = "<task-notification>"
 
+_HEADING_RE = re.compile(r"^(#{1,5})(?= )", re.MULTILINE)
+
 _BLOCK_RE = re.compile(r"<task-notification>(.*?)</task-notification>", re.DOTALL)
 _ID_RE = re.compile(r"<tool-use-id>([^<]+)</tool-use-id>")
 _RESULT_RE = re.compile(r"<result>(.*?)</result>", re.DOTALL)
+
+
+def demote_headings(text: str) -> str:
+    """Push a report's own markdown headings one level down.
+
+    A brief runs its own h1-h3, so without this the section heading wrapping it
+    has no level that outranks its content and folding it collapses almost
+    nothing.
+    """
+    return _HEADING_RE.sub(r"#\1", text)
 
 
 def is_task_notification(text: str) -> bool:

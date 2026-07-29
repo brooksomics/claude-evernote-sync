@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 import markdown
 
+from claude_evernote_sync.agent_results import demote_headings
 from claude_evernote_sync.parser import Message, Session
 from claude_evernote_sync.tables import style_tables
 from claude_evernote_sync.tool_calls import AGENT_TOOL, ToolCall
@@ -27,6 +28,11 @@ TITLE_MAX_LEN = 80
 # strips background/border/padding, so role distinction rides on colored bold
 # text rather than tinted boxes.
 ROLE_STYLES = {"user": ("You", "#4f46e5"), "assistant": ("Claude", "#d97706")}
+
+# Astral-plane emoji are stripped by Evernote's email->ENML conversion; the BMP
+# lightning bolt survives, so it is what marks a sub-agent's report.
+AGENT_MARKER = "⚡"
+AGENT_COLOR = "#0f766e"
 
 
 def xml_escape(text: str) -> str:
@@ -106,9 +112,15 @@ def render_agent_results(calls: tuple[ToolCall, ...]) -> str:
     h1-h3 fold in the Evernote app (including emailed notes), so each agent's
     findings collapse to a single heading line until expanded — the whole point
     of folding them into the parent note instead of one note per sub-agent.
+
+    The heading is h1 with a marker glyph because a research brief carries
+    dozens of its own h1-h3 headings; without the marker the boundary between
+    "the session" and "what an agent reported" is invisible when scanning.
     """
     return "".join(
-        f"<h3>{xml_escape(c.summary or AGENT_TOOL)}</h3>{render_message_text(c.result)}"
+        f'<h1><span style="color:{AGENT_COLOR}">{AGENT_MARKER} '
+        f"{xml_escape(c.summary or AGENT_TOOL)}</span></h1>"
+        f"{render_message_text(demote_headings(c.result))}"
         for c in calls
         if c.name == AGENT_TOOL and c.result
     )

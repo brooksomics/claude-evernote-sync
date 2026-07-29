@@ -1,6 +1,10 @@
 """Tests for pulling sub-agent findings out of task-notification records."""
 
-from claude_evernote_sync.agent_results import extract_agent_results, is_task_notification
+from claude_evernote_sync.agent_results import (
+    demote_headings,
+    extract_agent_results,
+    is_task_notification,
+)
 
 NOTIFICATION = """<task-notification>
 <task-id>a8c5036012d6be372</task-id>
@@ -49,3 +53,11 @@ def test_extract_agent_results_skips_notification_without_result() -> None:
 def test_is_task_notification_detects_the_wrapper() -> None:
     assert is_task_notification(NOTIFICATION)
     assert not is_task_notification("a normal user message")
+
+
+def test_demote_headings_pushes_every_level_down_one() -> None:
+    assert demote_headings("# A\n## B\n### C") == "## A\n### B\n#### C"
+
+
+def test_demote_headings_leaves_non_headings_alone() -> None:
+    assert demote_headings("a #hashtag and #4 issue\ntext") == "a #hashtag and #4 issue\ntext"

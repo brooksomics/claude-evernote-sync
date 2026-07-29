@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from claude_evernote_sync.formatter import (
+    AGENT_MARKER,
     Renderer,
     note_title_for_session,
     render_message_text,
@@ -362,10 +363,13 @@ def _assistant_with_agent_result(result: str = "Found: costs $12k/yr.") -> Sessi
 
 
 def test_render_full_shows_agent_result_as_foldable_heading(renderer: Renderer) -> None:
-    """h1-h3 fold in the Evernote app (including emailed notes), so each
-    agent's findings collapse to a one-line heading until expanded."""
+    """A report's own headings run h1-h3, so the section heading must outrank
+    them (h1) and carry a scannable marker, or an agent boundary is
+    indistinguishable from the dozens of headings inside the reports."""
     html = renderer.render_session_html(_assistant_with_agent_result())
-    assert "<h3>Research GLP-1 economics</h3>" in html
+    assert AGENT_MARKER in html
+    assert "<h1>" in html
+    assert "Research GLP-1 economics" in html
     assert "costs $12k/yr" in html
 
 
@@ -377,12 +381,12 @@ def test_render_agent_result_renders_markdown_body(renderer: Renderer) -> None:
 
 def test_render_omits_heading_when_agent_returned_nothing(renderer: Renderer) -> None:
     html = renderer.render_session_html(_assistant_with_agent_result(""))
-    assert "<h3>" not in html
+    assert AGENT_MARKER not in html
 
 
 def test_render_omits_heading_for_non_agent_tools(renderer: Renderer) -> None:
     html = renderer.render_session_html(_assistant_with_tools())
-    assert "<h3>" not in html
+    assert AGENT_MARKER not in html
 
 
 def test_render_conversation_depth_hides_agent_results() -> None:
@@ -399,5 +403,15 @@ def test_append_body_includes_agent_result(renderer: Renderer) -> None:
     lands in an append email must travel with it."""
     session = _assistant_with_agent_result()
     html = renderer.render_new_messages_html(session.messages)
-    assert "<h3>Research GLP-1 economics</h3>" in html
+    assert AGENT_MARKER in html
+    assert "Research GLP-1 economics" in html
     assert "costs $12k/yr" in html
+
+
+def test_render_demotes_headings_inside_an_agent_report(renderer: Renderer) -> None:
+    """The section heading only folds the whole brief if nothing inside it
+    outranks it, so a report's own headings are pushed one level down."""
+    html = renderer.render_session_html(_assistant_with_agent_result("# Brief\n\n## Detail"))
+    assert "<h2>Brief</h2>" in html
+    assert "<h3>Detail</h3>" in html
+    assert "<h1>Brief</h1>" not in html
