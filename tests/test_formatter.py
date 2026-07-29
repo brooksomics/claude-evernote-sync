@@ -353,3 +353,51 @@ def test_render_tool_call_without_summary_omits_trailing_space(renderer: Rendere
     m = Message("a1", "assistant", "go", ts, tool_calls=(ToolCall("TodoWrite", ""),))
     html = renderer.render_session_html(_session("s", "/x", [m]))
     assert "<li><code>TodoWrite</code></li>" in html
+
+
+def _assistant_with_agent_result(result: str = "Found: costs $12k/yr.") -> Session:
+    ts = datetime(2026, 5, 15, 10, tzinfo=UTC)
+    call = ToolCall("Agent", "Research GLP-1 economics", "toolu_1", result)
+    return _session("s", "/x", [Message("a1", "assistant", "Researching.", ts, tool_calls=(call,))])
+
+
+def test_render_full_shows_agent_result_as_foldable_heading(renderer: Renderer) -> None:
+    """h1-h3 fold in the Evernote app (including emailed notes), so each
+    agent's findings collapse to a one-line heading until expanded."""
+    html = renderer.render_session_html(_assistant_with_agent_result())
+    assert "<h3>Research GLP-1 economics</h3>" in html
+    assert "costs $12k/yr" in html
+
+
+def test_render_agent_result_renders_markdown_body(renderer: Renderer) -> None:
+    html = renderer.render_session_html(_assistant_with_agent_result("- **bold** point"))
+    assert "<strong>bold</strong>" in html
+    assert "<li>" in html
+
+
+def test_render_omits_heading_when_agent_returned_nothing(renderer: Renderer) -> None:
+    html = renderer.render_session_html(_assistant_with_agent_result(""))
+    assert "<h3>" not in html
+
+
+def test_render_omits_heading_for_non_agent_tools(renderer: Renderer) -> None:
+    html = renderer.render_session_html(_assistant_with_tools())
+    assert "<h3>" not in html
+
+
+def test_render_conversation_depth_hides_agent_results() -> None:
+    html = Renderer(content_depth="conversation").render_session_html(
+        _assistant_with_agent_result()
+    )
+    assert "Researching." in html
+    assert "<h3>" not in html
+    assert "costs $12k/yr" not in html
+
+
+def test_append_body_includes_agent_result(renderer: Renderer) -> None:
+    """Long sessions sync incrementally; a result attached to a message that
+    lands in an append email must travel with it."""
+    session = _assistant_with_agent_result()
+    html = renderer.render_new_messages_html(session.messages)
+    assert "<h3>Research GLP-1 economics</h3>" in html
+    assert "costs $12k/yr" in html

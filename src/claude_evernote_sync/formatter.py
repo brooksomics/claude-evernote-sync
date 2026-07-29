@@ -10,7 +10,7 @@ import markdown
 
 from claude_evernote_sync.parser import Message, Session
 from claude_evernote_sync.tables import style_tables
-from claude_evernote_sync.tool_calls import ToolCall
+from claude_evernote_sync.tool_calls import AGENT_TOOL, ToolCall
 
 ENML_PROLOGUE = (
     '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -100,6 +100,20 @@ def render_tool_calls(calls: tuple[ToolCall, ...]) -> str:
     return f"<ul><li>{label}<ul>{items}</ul></li></ul>"
 
 
+def render_agent_results(calls: tuple[ToolCall, ...]) -> str:
+    """One foldable section per Agent call carrying what that agent returned.
+
+    h1-h3 fold in the Evernote app (including emailed notes), so each agent's
+    findings collapse to a single heading line until expanded — the whole point
+    of folding them into the parent note instead of one note per sub-agent.
+    """
+    return "".join(
+        f"<h3>{xml_escape(c.summary or AGENT_TOOL)}</h3>{render_message_text(c.result)}"
+        for c in calls
+        if c.name == AGENT_TOOL and c.result
+    )
+
+
 def note_title_for_session(session: Session, bucket: str) -> str:
     """Build a stable, ASCII-safe note title for one session.
 
@@ -180,7 +194,7 @@ class Renderer:
         )
         body = header + render_message_text(msg.text) if msg.text else ""
         if self.content_depth != "conversation" and msg.tool_calls:
-            body += render_tool_calls(msg.tool_calls)
+            body += render_tool_calls(msg.tool_calls) + render_agent_results(msg.tool_calls)
         return body
 
     def _render_session_meta(self, session: Session) -> str:
