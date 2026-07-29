@@ -10,7 +10,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from claude_evernote_sync.tool_calls import ToolCall, extract_tool_calls
+from claude_evernote_sync.agent_results import extract_agent_results, is_task_notification
+from claude_evernote_sync.tool_calls import (
+    ToolCall,
+    extract_tool_calls,
+    text_from_content,
+    with_agent_results,
+)
 
 CONVERSATION_TYPES = {"user", "assistant"}
 ANSI_CSI_RE = re.compile(r"\x1b\[[\d;]*[a-zA-Z]")
@@ -76,24 +82,16 @@ def _parse_timestamp(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
-def _extract_text_from_content(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    if not isinstance(content, list):
-        return ""
-    parts: list[str] = []
-    for block in content:
-        if isinstance(block, dict) and block.get("type") == "text":
-            parts.append(str(block.get("text", "")))
-    return "\n".join(parts)
+def _content_of(record: dict[str, Any]) -> Any:
+    return (record.get("message") or {}).get("content")
 
 
 def _extract_message(record: dict[str, Any]) -> Message | None:
     if record.get("type") not in CONVERSATION_TYPES:
         return None
-    content = (record.get("message") or {}).get("content")
-    text = _extract_text_from_content(content).strip()
-    if is_slash_command_lifecycle(text):
+    content = _content_of(record)
+    text = text_from_content(content).strip()
+    if is_slash_command_lifecycle(text) or is_task_notification(text):
         return None
     tool_calls = extract_tool_calls(content)
     if not text and not tool_calls:
@@ -163,9 +161,32 @@ def _build_session(path: Path, records: list[dict[str, Any]]) -> Session | None:
     )
 
 
+def _attach_agent_results(session: Session, records: list[dict[str, Any]]) -> None:
+    """Pair each Agent call with the report from its task-notification.
+
+    Reports are collected across the whole file first: the notification lands
+    many records after the launch. The report attaches to the launch message,
+    so a session already appended past that message before its agent finished
+    keeps the findings out of the note.
+    # ponytail: good enough while quiet_minutes gates on session end; key the
+    # report to the notification's own timestamp if that stops holding.
+    """
+    results: dict[str, str] = {}
+    for record in records:
+        results.update(extract_agent_results(record))
+    if not results:
+        return
+    session.messages[:] = [
+        replace(m, tool_calls=with_agent_results(m.tool_calls, results)) for m in session.messages
+    ]
+
+
 def parse_jsonl_file(path: Path) -> Session | None:
     """Parse a Claude Code JSONL session file. Returns None if no usable content."""
     if not path.exists():
         return None
     records = list(_iter_records(path))
-    return _build_session(path, records)
+    session = _build_session(path, records)
+    if session is not None:
+        _attach_agent_results(session, records)
+    return session

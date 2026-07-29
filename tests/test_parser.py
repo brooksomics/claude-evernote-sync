@@ -1,5 +1,6 @@
 """Tests for the JSONL parser."""
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -253,3 +254,106 @@ def test_parser_strips_ansi_from_message_text(tmp_path: Path) -> None:
 
 def test_session_summary_defaults_to_none(sample_session: Session) -> None:
     assert sample_session.summary is None
+
+
+def _agent_launch_and_notification(tool_name: str = "Agent") -> list[str]:
+    """A background Agent launch, then the task-notification carrying its report.
+
+    The tool_result for a background agent is launch metadata, not the report;
+    the findings arrive later in a task-notification record.
+    """
+    launch = {
+        "type": "assistant",
+        "uuid": "a1",
+        "timestamp": "2026-05-15T10:00:00.000Z",
+        "cwd": "/x",
+        "sessionId": "s",
+        "message": {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "Kicking off research."},
+                {
+                    "type": "tool_use",
+                    "id": "toolu_1",
+                    "name": tool_name,
+                    "input": {"description": "Research GLP-1 economics"},
+                },
+            ],
+        },
+    }
+    stub = {
+        "type": "user",
+        "uuid": "u2",
+        "timestamp": "2026-05-15T10:00:01.000Z",
+        "cwd": "/x",
+        "sessionId": "s",
+        "message": {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_1",
+                    "content": "Async agent launched successfully. agentId: abc123",
+                }
+            ],
+        },
+    }
+    notification = {
+        "type": "user",
+        "uuid": "u3",
+        "timestamp": "2026-05-15T10:05:00.000Z",
+        "cwd": "/x",
+        "sessionId": "s",
+        "message": {
+            "role": "user",
+            "content": (
+                "<task-notification>\n<tool-use-id>toolu_1</tool-use-id>\n"
+                '<status>completed</status>\n<summary>Agent "Research GLP-1 economics" finished'
+                "</summary>\n<result>GLP-1 costs $12k/yr; regain is ~two thirds.</result>\n"
+                "</task-notification>"
+            ),
+        },
+    }
+    return [json.dumps(r) for r in (launch, stub, notification)]
+
+
+def test_parser_attaches_agent_report_from_notification(tmp_path: Path) -> None:
+    """A sub-agent's returned synthesis is the highest-signal content in a
+    session and is lost entirely if only the prompt gloss survives."""
+    p = tmp_path / "agent.jsonl"
+    p.write_text("\n".join(_agent_launch_and_notification()))
+    session = parse_jsonl_file(p)
+    assert session is not None
+    (call,) = session.messages[0].tool_calls
+    assert call.summary == "Research GLP-1 economics"
+    assert "regain is ~two thirds" in call.result
+
+
+def test_parser_never_surfaces_async_launch_metadata(tmp_path: Path) -> None:
+    """The Agent tool_result is internal launch metadata that must not reach a
+    note; only the notification's <result> counts."""
+    p = tmp_path / "agent.jsonl"
+    p.write_text("\n".join(_agent_launch_and_notification()))
+    session = parse_jsonl_file(p)
+    assert session is not None
+    assert "Async agent launched" not in session.messages[0].tool_calls[0].result
+    assert all("agentId" not in m.text for m in session.messages)
+
+
+def test_parser_drops_task_notification_as_user_dialogue(tmp_path: Path) -> None:
+    """The notification is machine plumbing wearing a user role; rendering it
+    verbatim attributes an agent's report to the user and leaks the raw XML."""
+    p = tmp_path / "agent.jsonl"
+    p.write_text("\n".join(_agent_launch_and_notification()))
+    session = parse_jsonl_file(p)
+    assert session is not None
+    assert all("<task-notification>" not in m.text for m in session.messages)
+    assert all("output-file" not in m.text for m in session.messages)
+
+
+def test_parser_does_not_attach_report_to_non_agent_tools(tmp_path: Path) -> None:
+    p = tmp_path / "bash.jsonl"
+    p.write_text("\n".join(_agent_launch_and_notification("Bash")))
+    session = parse_jsonl_file(p)
+    assert session is not None
+    assert session.messages[0].tool_calls[0].result == ""
